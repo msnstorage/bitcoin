@@ -1879,7 +1879,7 @@ bool AppInitMain(InitInterfaces& interfaces)
 
     // ********************************************************* Step 11d: start masternode-ps-<smth> threads
 
-    if (fMasterNode)
+    if (!fLiteMode)
         threadGroup.create_thread(boost::bind(&ThreadCheckMasternode, boost::ref(*g_connman)));
 
     // ********************************************************* Step 12: start node
