@@ -10,7 +10,10 @@
 #include <consensus/params.h>
 #include <consensus/validation.h>
 #include <core_io.h>
+#include <governance-classes.h>
 #include <key_io.h>
+#include <masternode-payments.h>
+#include <masternode-sync.h>
 #include <miner.h>
 #include <net.h>
 #include <policy/fees.h>
@@ -365,6 +368,27 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
             "  \"curtime\" : ttt,                  (numeric) current timestamp in seconds since epoch (Jan 1 1970 GMT)\n"
             "  \"bits\" : \"xxxxxxxx\",              (string) compressed target of next block\n"
             "  \"height\" : n                      (numeric) The height of the next block\n"
+            "  \"masternode\" : {                  (json object) required masternode payee that must be included in the next block\n"
+            "      \"payee\" : \"xxxx\",             (string) payee address\n"
+            "      \"script\" : \"xxxx\",            (string) payee scriptPubKey\n"
+            "      \"amount\": n                   (numeric) required amount to pay\n"
+            "  },\n"
+            "  \"masternode_payments_started\" :  true|false, (boolean) true, if masternode payments started\n"
+            "  \"masternode_payments_enforced\" : true|false, (boolean) true, if masternode payments are enforced\n"
+            "  \"superblock\" : [                  (array) required superblock payees that must be included in the next block\n"
+            "      {\n"
+            "         \"payee\" : \"xxxx\",          (string) payee address\n"
+            "         \"script\" : \"xxxx\",         (string) payee scriptPubKey\n"
+            "         \"amount\": n                (numeric) required amount to pay\n"
+            "      }\n"
+            "      ,...\n"
+            "  ],\n"
+            "  \"superblocks_started\" : true|false, (boolean) true, if superblock payments started\n"
+            "  \"superblocks_enabled\" : true|false  (boolean) true, if superblock payments are enabled\n" 
+            "  \"founderreward\" : {               (json object) required founder reward that must be included in the next block\n"
+            "      \"payee\" : \"xxxx\",           (string) payee address\n"
+            "      \"amount\": n                   (numeric) required amount to pay\n"
+            "  },\n"
             "}\n"
                 },
                 RPCExamples{
@@ -448,6 +472,19 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
 
     if (IsInitialBlockDownload())
         throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Bitcoin is downloading blocks...");
+
+    // when enforcement is on we need information about a masternode payee or otherwise our block is going to be orphaned by the network
+    CScript payee;
+    if (sporkManager.IsSporkActive(SPORK_8_MASTERNODE_PAYMENT_ENFORCEMENT)
+        && !masternodeSync.IsWinnersListSynced()
+        && !mnpayments.GetBlockPayee(chainActive.Height() + 1, payee))
+            throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Bitcoin Core is downloading masternode winners...");
+
+    // next bock is a superblock and we need governance info to correctly construct it
+    if (sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED)
+        && !masternodeSync.IsSynced()
+        && CSuperblock::IsValidBlockHeight(chainActive.Height() + 1))
+            throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Bitcoin Core is syncing with network...");
 
     static unsigned int nTransactionsUpdatedLast;
 
@@ -649,7 +686,7 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     result.pushKV("previousblockhash", pblock->hashPrevBlock.GetHex());
     result.pushKV("transactions", transactions);
     result.pushKV("coinbaseaux", aux);
-    result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->vout[0].nValue);
+    result.pushKV("coinbasevalue", (int64_t)pblock->vtx[0]->GetValueOut());
     result.pushKV("longpollid", chainActive.Tip()->GetBlockHash().GetHex() + i64tostr(nTransactionsUpdatedLast));
     result.pushKV("target", hashTarget.GetHex());
     result.pushKV("mintime", (int64_t)pindexPrev->GetMedianTimePast()+1);
@@ -671,6 +708,36 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     result.pushKV("curtime", pblock->GetBlockTime());
     result.pushKV("bits", strprintf("%08x", pblock->nBits));
     result.pushKV("height", (int64_t)(pindexPrev->nHeight+1));
+
+    UniValue masternodeObj(UniValue::VOBJ);
+    if(pblock->txoutMasternode != CTxOut()) {
+        CTxDestination address1;
+        ExtractDestination(pblock->txoutMasternode.scriptPubKey, address1);
+        std::string address2 = EncodeDestination(address1);
+        masternodeObj.pushKV("payee", address2.c_str());
+        masternodeObj.pushKV("script", HexStr(pblock->txoutMasternode.scriptPubKey.begin(), pblock->txoutMasternode.scriptPubKey.end()));
+        masternodeObj.pushKV("amount", pblock->txoutMasternode.nValue);
+    }
+    result.pushKV("masternode", masternodeObj);
+    result.pushKV("masternode_payments_started", pindexPrev->nHeight + 1 > Params().GetConsensus().nMasternodePaymentsStartBlock);
+    result.pushKV("masternode_payments_enforced", sporkManager.IsSporkActive(SPORK_8_MASTERNODE_PAYMENT_ENFORCEMENT));
+
+    UniValue superblockObjArray(UniValue::VARR);
+    if(pblock->voutSuperblock.size()) {
+        for (const CTxOut& txout : pblock->voutSuperblock) {
+            UniValue entry(UniValue::VOBJ);
+            CTxDestination address1;
+            ExtractDestination(txout.scriptPubKey, address1);
+            std::string address2 = EncodeDestination(address1);
+            entry.pushKV("payee", address2.c_str());
+            entry.pushKV("script", HexStr(txout.scriptPubKey.begin(), txout.scriptPubKey.end()));
+            entry.pushKV("amount", txout.nValue);
+            superblockObjArray.push_back(entry);
+        }
+    }
+    result.pushKV("superblock", superblockObjArray);
+    result.pushKV("superblocks_started", pindexPrev->nHeight + 1 > Params().GetConsensus().nSuperblockStartBlock);
+    result.pushKV("superblocks_enabled", sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED));
 
     if (!pblocktemplate->vchCoinbaseCommitment.empty()) {
         result.pushKV("default_witness_commitment", HexStr(pblocktemplate->vchCoinbaseCommitment.begin(), pblocktemplate->vchCoinbaseCommitment.end()));

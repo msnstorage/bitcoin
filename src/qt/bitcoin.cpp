@@ -29,6 +29,7 @@
 
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
+#include <masternodeconfig.h>
 #include <noui.h>
 #include <rpc/server.h>
 #include <ui_interface.h>
@@ -537,6 +538,15 @@ int GuiMain(int argc, char* argv[])
     initTranslations(qtTranslatorBase, qtTranslator, translatorBase, translator);
 
 #ifdef ENABLE_WALLET
+
+    /// 7a. parse masternode.conf
+    std::string strErr;
+    if(!masternodeConfig.read(strErr)) {
+        QMessageBox::critical(0, QObject::tr("Bitcoin Core"),
+                              QObject::tr("Error reading masternode configuration file: %1").arg(strErr.c_str()));
+        return EXIT_FAILURE;
+    }
+
     /// 8. URI IPC sending
     // - Do this early as we don't want to bother initializing if we are just calling IPC
     // - Do this *after* setting up the data directory, as the data directory hash is used in the name

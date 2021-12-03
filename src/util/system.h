@@ -39,10 +39,30 @@
 // Application startup time (used for uptime calculation)
 int64_t GetStartupTime();
 
+// Debugging macros
+
+// Uncomment the following line to enable debugging messages
+// or enable on a per file basis prior to inclusion of util.h
+//#define ENABLE_DASH_DEBUG
+#ifdef ENABLE_DASH_DEBUG
+#define DBG( x ) x
+#else
+#define DBG( x )
+#endif
+
+// Masternode only features
+extern bool fMasterNode;
+extern bool fLiteMode;
+
+extern bool fDebug;
+
 extern const char * const BITCOIN_CONF_FILENAME;
 
 /** Translate a message to the native language of the user. */
 const extern std::function<std::string(const char*)> G_TRANSLATION_FUN;
+
+extern const char * const MASTERNODE_CONF_FILENAME;
+extern const char * const MASTERNODE_CONF_FILENAME_ARG;
 
 /**
  * Translation function.
@@ -123,6 +143,7 @@ enum class OptionsCategory {
     GUI,
     COMMANDS,
     REGISTER_COMMANDS,
+    MASTERNODE_FEATURES,
 
     HIDDEN // Always the last option to avoid printing these in the help
 };
@@ -386,5 +407,30 @@ private:
 #endif
 
 } // namespace util
+
+/**
+ * @brief Converts version strings to 4-byte unsigned integer
+ * @param strVersion version in "x.x.x" format (decimal digits only)
+ * @return 4-byte unsigned integer, most significant byte is always 0
+ * Throws std::bad_cast if format doesn\t match.
+ */
+uint32_t StringVersionToInt(const std::string& strVersion);
+
+/**
+ * @brief Converts version as 4-byte unsigned integer to string
+ * @param nVersion 4-byte unsigned integer, most significant byte is always 0
+ * @return version string in "x.x.x" format (last 3 bytes as version parts)
+ * Throws std::bad_cast if format doesn\t match.
+ */
+std::string IntVersionToString(uint32_t nVersion);
+
+/**
+ * @brief Copy of the IntVersionToString, that returns "Invalid version" string
+ * instead of throwing std::bad_cast
+ * @param nVersion 4-byte unsigned integer, most significant byte is always 0
+ * @return version string in "x.x.x" format (last 3 bytes as version parts)
+ * or "Invalid version" if can't cast the given value
+ */
+std::string SafeIntVersionToString(uint32_t nVersion);
 
 #endif // BITCOIN_UTIL_SYSTEM_H

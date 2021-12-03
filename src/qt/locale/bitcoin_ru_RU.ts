@@ -1699,6 +1699,18 @@
         <translation>Использование памяти</translation>
     </message>
     <message>
+        <source>Masternodes</source>
+        <translation>Мастерноды</translation>
+    </message>
+    <message>
+        <source>Number of Masternodes</source>
+        <translation>Количество Мастернод</translation>
+    </message>
+    <message>
+        <source>Total:</source>
+        <translation>Всего:</translation>
+    </message>
+    <message>
         <source>Wallet: </source>
         <translation>Кошелек:</translation>
     </message>

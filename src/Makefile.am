@@ -19,6 +19,7 @@ else
 LIBUNIVALUE = $(UNIVALUE_LIBS)
 endif
 
+BITCOIN_CONFIG_INCLUDES=-I$(builddir)/config
 BITCOIN_INCLUDES=-I$(builddir) $(BDB_CPPFLAGS) $(BOOST_CPPFLAGS) $(LEVELDB_CPPFLAGS) $(CRYPTO_CFLAGS) $(SSL_CFLAGS)
 
 BITCOIN_INCLUDES += -I$(srcdir)/secp256k1/include
@@ -227,6 +228,31 @@ BITCOIN_CORE_H = \
   zmq/zmqpublishnotifier.h \
   zmq/zmqrpc.h
 
+# bitcoin core #
+BITCOIN_CORE_H += \
+  activemasternode.h \
+  cachemap.h \
+  cachemultimap.h \
+  dsnotificationinterface.h \
+  flat-database.h \
+  governance.h \
+  governance-classes.h \
+  governance-exceptions.h \
+  governance-misc.h \
+  governance-object.h \
+  governance-validators.h \
+  governance-vote.h \
+  governance-votedb.h \
+  masternode.h \
+  masternodeman.h \
+  masternode-payments.h \
+  masternode-sync.h \
+  masternodeconfig.h \
+  messagesigner.h \
+  netfulfilledman.h \
+  spork.h \
+  sporkdb.h
+
 
 obj/build.h: FORCE
 	@$(MKDIR_P) $(builddir)/obj
@@ -287,6 +313,29 @@ libbitcoin_server_a_SOURCES = \
   versionbits.cpp \
   $(BITCOIN_CORE_H)
 
+# bitcoin server
+libbitcoin_server_a_SOURCES += \
+  activemasternode.cpp \
+  dsnotificationinterface.cpp \
+  governance.cpp \
+  governance-classes.cpp \
+  governance-object.cpp \
+  governance-validators.cpp \
+  governance-vote.cpp \
+  governance-votedb.cpp \
+  masternode.cpp \
+  masternodeman.cpp \
+  masternode-payments.cpp \
+  masternode-sync.cpp \
+  masternodeconfig.cpp \
+  messagesigner.cpp \
+  netfulfilledman.cpp \
+  rpc/governance.cpp \
+  rpc/masternode.cpp \
+  spork.cpp \
+  sporkdb.cpp
+#
+
 if !ENABLE_WALLET
 libbitcoin_server_a_SOURCES += dummywallet.cpp
 endif
@@ -330,8 +379,8 @@ libbitcoin_wallet_tool_a_SOURCES = \
   $(BITCOIN_CORE_H)
 
 # crypto primitives library
-crypto_libbitcoin_crypto_base_a_CPPFLAGS = $(AM_CPPFLAGS)
-crypto_libbitcoin_crypto_base_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
+crypto_libbitcoin_crypto_base_a_CPPFLAGS = $(AM_CPPFLAGS) $(PIC_FLAGS)
+crypto_libbitcoin_crypto_base_a_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS) $(PIC_FLAGS)
 crypto_libbitcoin_crypto_base_a_SOURCES = \
   crypto/aes.cpp \
   crypto/aes.h \
@@ -550,7 +599,7 @@ bitcoin_tx_LDADD += $(BOOST_LIBS) $(CRYPTO_LIBS)
 
 # bitcoin-wallet binary #
 bitcoin_wallet_SOURCES = bitcoin-wallet.cpp
-bitcoin_wallet_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES)
+bitcoin_wallet_CPPFLAGS = $(AM_CPPFLAGS) $(BITCOIN_INCLUDES) $(EVENT_CFLAGS)
 bitcoin_wallet_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 bitcoin_wallet_LDFLAGS = $(RELDFLAGS) $(AM_LDFLAGS) $(LIBTOOL_APP_LDFLAGS)
 
@@ -560,10 +609,12 @@ endif
 
 bitcoin_wallet_LDADD = \
   $(LIBBITCOIN_WALLET_TOOL) \
+  $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_WALLET) \
   $(LIBBITCOIN_SERVER) \
   $(LIBBITCOIN_COMMON) \
   $(LIBBITCOIN_CONSENSUS) \
+  $(LIBUNIVALUE) \
   $(LIBBITCOIN_UTIL) \
   $(LIBBITCOIN_CRYPTO) \
   $(LIBLEVELDB) \
@@ -571,7 +622,11 @@ bitcoin_wallet_LDADD = \
   $(LIBMEMENV) \
   $(LIBSECP256K1)
 
-bitcoin_wallet_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS)
+bitcoin_wallet_LDADD += $(BOOST_LIBS) $(BDB_LIBS) $(CRYPTO_LIBS) $(MINIUPNPC_LIBS) $(EVENT_PTHREADS_LIBS) $(EVENT_LIBS)
+
+if ENABLE_ZMQ
+bitcoin_wallet_LDADD += $(LIBBITCOIN_ZMQ) $(ZMQ_LIBS)
+endif
 #
 
 # bitcoinconsensus library #
@@ -584,7 +639,7 @@ if GLIBC_BACK_COMPAT
 endif
 
 libbitcoinconsensus_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined $(RELDFLAGS)
-libbitcoinconsensus_la_LIBADD = $(LIBSECP256K1)
+libbitcoinconsensus_la_LIBADD = $(LIBSECP256K1) $(CRYPTO_LIBS)
 libbitcoinconsensus_la_CPPFLAGS = $(AM_CPPFLAGS) -I$(builddir)/obj -I$(srcdir)/secp256k1/include -DBUILD_BITCOIN_INTERNAL
 libbitcoinconsensus_la_CXXFLAGS = $(AM_CXXFLAGS) $(PIE_FLAGS)
 

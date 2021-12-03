@@ -404,6 +404,23 @@ bool openBitcoinConf()
     return res;
 }
 
+void openMNConfigfile()
+{
+    boost::filesystem::path pathConfig = GetConfigFile(MASTERNODE_CONF_FILENAME);
+
+    /* Create the file */
+    boost::filesystem::ofstream configFile(pathConfig, std::ios_base::app);
+
+    if (!configFile.good())
+        return;
+
+    configFile.close();
+
+    /* Open masternode.conf with the associated application */
+    if (fs::exists(pathConfig))
+        QDesktopServices::openUrl(QUrl::fromLocalFile(boostPathToQString(pathConfig)));
+}
+
 ToolTipToRichTextFilter::ToolTipToRichTextFilter(int _size_threshold, QObject *parent) :
     QObject(parent),
     size_threshold(_size_threshold)

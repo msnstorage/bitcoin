@@ -11,6 +11,14 @@
 #include <script/standard.h>           // For CTxDestination
 #include <support/allocators/secure.h> // For SecureString
 #include <ui_interface.h>              // For ChangeType
+#ifdef ENABLE_WALLET
+#include <wallet/wallet.h>
+#else  // ENABLE_WALLET
+enum AvailableCoinsType
+{
+    ALL_COINS
+};
+#endif // ENABLE_WALLET
 
 #include <functional>
 #include <map>
@@ -137,7 +145,8 @@ public:
         bool sign,
         int& change_pos,
         CAmount& fee,
-        std::string& fail_reason) = 0;
+        std::string& fail_reason,
+        AvailableCoinsType nCoinType = ALL_COINS) = 0;
 
     //! Return whether transaction can be abandoned.
     virtual bool transactionCanBeAbandoned(const uint256& txid) = 0;
@@ -281,6 +290,10 @@ public:
     //! Register handler for keypool changed messages.
     using CanGetAddressesChangedFn = std::function<void()>;
     virtual std::unique_ptr<Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn) = 0;
+
+    //! Register handler for additional sync data progress messages.
+    using NotifyAdditionalDataSyncProgressChangedFn = std::function<void(double nSyncProgress)>;
+    virtual std::unique_ptr<Handler> handleNotifyAdditionalDataSyncProgressChanged(NotifyAdditionalDataSyncProgressChangedFn fn) = 0;
 };
 
 //! Tracking object returned by CreateTransaction and passed to CommitTransaction.

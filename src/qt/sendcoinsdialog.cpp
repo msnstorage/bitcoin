@@ -242,6 +242,8 @@ void SendCoinsDialog::on_sendButton_clicked()
         return;
     }
 
+    recipients[0].inputType = ALL_COINS;
+
     fNewRecipientAllowed = false;
     WalletModel::UnlockContext ctx(model->requestUnlock());
     if(!ctx.isValid())

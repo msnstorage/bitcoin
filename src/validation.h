@@ -117,7 +117,7 @@ static const int64_t MAX_FEE_ESTIMATION_TIP_AGE = 3 * 60 * 60;
 /** Default for -permitbaremultisig */
 static const bool DEFAULT_PERMIT_BAREMULTISIG = true;
 static const bool DEFAULT_CHECKPOINTS_ENABLED = true;
-static const bool DEFAULT_TXINDEX = false;
+static const bool DEFAULT_TXINDEX = true;
 static const unsigned int DEFAULT_BANSCORE_THRESHOLD = 100;
 /** Default for -persistmempool */
 static const bool DEFAULT_PERSIST_MEMPOOL = true;
@@ -171,6 +171,11 @@ extern CAmount maxTxFee;
 /** If the tip is older than this (in seconds), the node is considered to be in initial block download. */
 extern int64_t nMaxTipAge;
 extern bool fEnableReplacement;
+
+extern bool fLargeWorkForkFound;
+extern bool fLargeWorkInvalidChainFound;
+
+extern std::map<uint256, int64_t> mapRejectedBlocks;
 
 /** Block hash whose ancestors we will assume to have valid scripts without checking them. */
 extern uint256 hashAssumeValid;
@@ -275,7 +280,8 @@ bool GetTransaction(const uint256& hash, CTransactionRef& tx, const Consensus::P
  * validationinterface callback.
  */
 bool ActivateBestChain(CValidationState& state, const CChainParams& chainparams, std::shared_ptr<const CBlock> pblock = std::shared_ptr<const CBlock>());
-CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams);
+CAmount GetBlockSubsidy(int nHeight, CBlockHeader pblock, const Consensus::Params& consensusParams, bool fSuperblockPartOnly = false);
+CAmount GetMasternodePayment(int nHeight, CAmount blockValue);
 
 /** Guess verification progress (as a fraction between 0.0=genesis and 1.0=current tip). */
 double GuessVerificationProgress(const ChainTxData& data, const CBlockIndex* pindex);
@@ -305,6 +311,10 @@ void PruneBlockFilesManual(int nManualPruneHeight);
 bool AcceptToMemoryPool(CTxMemPool& pool, CValidationState &state, const CTransactionRef &tx,
                         bool* pfMissingInputs, std::list<CTransactionRef>* plTxnReplaced,
                         bool bypass_limits, const CAmount nAbsurdFee, bool test_accept=false) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+bool GetUTXOCoin(const COutPoint& outpoint, Coin& coin);
+int GetUTXOHeight(const COutPoint& outpoint);
+int GetUTXOConfirmations(const COutPoint& outpoint);
 
 /** Convert CValidationState to a human-readable message for logging */
 std::string FormatStateMessage(const CValidationState &state);
@@ -398,6 +408,9 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex
 
 /** Functions for validating blocks and updating the block tree */
 
+/** Reprocess a number of blocks to try and get on the correct chain again **/
+void ReprocessBlocks(int nBlocks);
+
 /** Context-independent validity checks */
 bool CheckBlock(const CBlock& block, CValidationState& state, const Consensus::Params& consensusParams, bool fCheckPOW = true, bool fCheckMerkleRoot = true);
 
@@ -473,6 +486,12 @@ extern std::unique_ptr<CBlockTreeDB> pblocktree;
 int GetSpendHeight(const CCoinsViewCache& inputs);
 
 extern VersionBitsCache versionbitscache;
+
+/**
+ * Return true if hash can be found in chainActive at nBlockHeight height.
+ * Fills hashRet with found hash, if no nBlockHeight is specified - chainActive.Height() is used.
+ */
+bool GetBlockHash(uint256& hashRet, int nBlockHeight = -1);
 
 /**
  * Determine what nVersion a new block should use.

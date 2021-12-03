@@ -9,6 +9,7 @@
 
 #include <init.h>
 
+#include <activemasternode.h>
 #include <addrman.h>
 #include <amount.h>
 #include <banman.h>
@@ -17,16 +18,26 @@
 #include <checkpoints.h>
 #include <compat/sanity.h>
 #include <consensus/validation.h>
+#include <dsnotificationinterface.h>
+#include <flat-database.h>
 #include <fs.h>
+#include <governance.h>
 #include <httpserver.h>
 #include <httprpc.h>
 #include <interfaces/chain.h>
 #include <index/txindex.h>
 #include <key.h>
+#include <key_io.h>
 #include <validation.h>
 #include <miner.h>
 #include <netbase.h>
+#include <masternode-payments.h>
+#include <masternode-sync.h>
+#include <masternodeman.h>
+#include <masternodeconfig.h>
+#include <messagesigner.h>
 #include <net.h>
+#include <netfulfilledman.h>
 #include <net_processing.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
@@ -51,6 +62,12 @@
 #include <walletinitinterface.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <spork.h>
+#include <sporkdb.h>
+
+#ifdef ENABLE_WALLET
+#include <wallet/wallet.h>
+#endif // ENABLE_WALLET
 
 #ifndef WIN32
 #include <attributes.h>
@@ -82,6 +99,8 @@ static constexpr int DUMP_BANS_INTERVAL = 60 * 15;
 std::unique_ptr<CConnman> g_connman;
 std::unique_ptr<PeerLogicValidation> peerLogic;
 std::unique_ptr<BanMan> g_banman;
+
+static CDSNotificationInterface* pdsNotificationInterface = NULL;
 
 #ifdef WIN32
 // Win32 LevelDB doesn't use filedescriptors, and the ones used for
@@ -238,6 +257,16 @@ void Shutdown(InitInterfaces& interfaces)
         DumpMempool();
     }
 
+    // STORE DATA CACHES INTO SERIALIZED DAT FILES
+    CFlatDB<CMasternodeMan> flatdb1("mncache.dat", "magicMasternodeCache");
+    flatdb1.Dump(mnodeman);
+    CFlatDB<CMasternodePayments> flatdb2("mnpayments.dat", "magicMasternodePaymentsCache");
+    flatdb2.Dump(mnpayments);
+    CFlatDB<CGovernanceManager> flatdb3("governance.dat", "magicGovernanceCache");
+    flatdb3.Dump(governance);
+    CFlatDB<CNetFulfilledRequestManager> flatdb4("netfulfilled.dat", "magicFulfilledCache");
+    flatdb4.Dump(netfulfilledman);
+
     if (fFeeEstimatesInitialized)
     {
         ::feeEstimator.FlushUnconfirmed();
@@ -274,6 +303,7 @@ void Shutdown(InitInterfaces& interfaces)
         pcoinscatcher.reset();
         pcoinsdbview.reset();
         pblocktree.reset();
+        pSporkDB.reset();
     }
     for (const auto& client : interfaces.chain_clients) {
         client->stop();
@@ -286,6 +316,12 @@ void Shutdown(InitInterfaces& interfaces)
         g_zmq_notification_interface = nullptr;
     }
 #endif
+
+    if (pdsNotificationInterface) {
+        UnregisterValidationInterface(pdsNotificationInterface);
+        delete pdsNotificationInterface;
+        pdsNotificationInterface = NULL;
+    }
 
     try {
         if (!fs::remove(GetPidFile())) {
@@ -544,6 +580,11 @@ void SetupServerArgs()
 #else
     hidden_args.emplace_back("-daemon");
 #endif
+
+    gArgs.AddArg("-masternode", "Run as masternode", false, OptionsCategory::MASTERNODE_FEATURES);
+    gArgs.AddArg("-masternodeprivkey", "Masternode private key", false, OptionsCategory::MASTERNODE_FEATURES);
+    hidden_args.emplace_back("-litemode");
+    hidden_args.emplace_back("-sporkkey");
 
     // Add the hidden options
     gArgs.AddHiddenArgs(hidden_args);
@@ -1276,6 +1317,12 @@ bool AppInitMain(InitInterfaces& interfaces)
             threadGroup.create_thread(&ThreadScriptCheck);
     }
 
+    if (gArgs.IsArgSet("-sporkkey")) // spork priv key
+    {
+        if (!sporkManager.SetPrivKey(gArgs.GetArg("-sporkkey", "")))
+            return InitError(_("Unable to sign spork message, wrong key?"));
+    }
+
     // Start the lightweight task scheduler thread
     CScheduler::Function serviceLoop = std::bind(&CScheduler::serviceQueue, &scheduler);
     threadGroup.create_thread(std::bind(&TraceThread<CScheduler::Function>, "scheduler", serviceLoop));
@@ -1430,6 +1477,9 @@ bool AppInitMain(InitInterfaces& interfaces)
     uint64_t nMaxOutboundLimit = 0; //unlimited unless -maxuploadtarget is set
     uint64_t nMaxOutboundTimeframe = MAX_UPLOAD_TIMEFRAME;
 
+    pdsNotificationInterface = new CDSNotificationInterface(*g_connman);
+    RegisterValidationInterface(pdsNotificationInterface);
+
     if (gArgs.IsArgSet("-maxuploadtarget")) {
         nMaxOutboundLimit = gArgs.GetArg("-maxuploadtarget", DEFAULT_MAX_UPLOAD_TARGET)*1024*1024;
     }
@@ -1480,6 +1530,8 @@ bool AppInitMain(InitInterfaces& interfaces)
                 // fails if it's still open from the previous loop. Close it first:
                 pblocktree.reset();
                 pblocktree.reset(new CBlockTreeDB(nBlockTreeDBCache, false, fReset));
+                pSporkDB.reset();
+                pSporkDB.reset(new CSporkDB(0, false, false));
 
                 if (fReset) {
                     pblocktree->WriteReindexing(true);
@@ -1487,6 +1539,10 @@ bool AppInitMain(InitInterfaces& interfaces)
                     if (fPruneMode)
                         CleanupBlockRevFiles();
                 }
+
+                uiInterface.InitMessage(_("Loading sporks..."));
+                sporkManager.LoadSporksFromDB();
+                uiInterface.InitMessage(_("Loading block index..."));
 
                 if (ShutdownRequested()) break;
 
@@ -1717,6 +1773,114 @@ bool AppInitMain(InitInterfaces& interfaces)
     if (ShutdownRequested()) {
         return false;
     }
+
+    // ********************************************************* Step 11a: setup PrivateSend
+    fMasterNode = gArgs.GetBoolArg("-masternode", false);
+
+    if((fMasterNode || masternodeConfig.getCount() > -1) && gArgs.GetBoolArg("-txindex", DEFAULT_TXINDEX) == false) {
+        return InitError("Enabling Masternode support requires turning on transaction indexing."
+                  "Please add txindex=1 to your configuration and start with -reindex");
+    }
+
+    if(fMasterNode) {
+        LogPrintf("MASTERNODE:\n");
+
+        std::string strMasterNodePrivKey = gArgs.GetArg("-masternodeprivkey", "");
+        if(!strMasterNodePrivKey.empty()) {
+            if(!CMessageSigner::GetKeysFromSecret(strMasterNodePrivKey, activeMasternode.keyMasternode, activeMasternode.pubKeyMasternode))
+                return InitError(_("Invalid masternodeprivkey. Please see documenation."));
+
+            LogPrintf("  pubKeyMasternode: %s\n", EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
+        } else {
+            return InitError(_("You must specify a masternodeprivkey in the configuration. Please see documentation for help."));
+        }
+    }
+
+#ifdef ENABLE_WALLET
+    LogPrintf("Using masternode config file %s\n", GetConfigFile(gArgs.GetArg(MASTERNODE_CONF_FILENAME_ARG, MASTERNODE_CONF_FILENAME)).string());
+
+    for (std::shared_ptr<CWallet> const wallet : GetWallets()) {
+        CWallet* const pwallet = wallet.get();
+        if(gArgs.GetBoolArg("-mnconflock", true) && pwallet && (masternodeConfig.getCount() > 0)) {
+            LOCK(pwallet->cs_wallet);
+            LogPrintf("Locking Masternodes:\n");
+            uint256 mnTxHash;
+            int outputIndex;
+            for (CMasternodeConfig::CMasternodeEntry mne : masternodeConfig.getEntries()) {
+                mnTxHash.SetHex(mne.getTxHash());
+                outputIndex = boost::lexical_cast<unsigned int>(mne.getOutputIndex());
+                COutPoint outpoint = COutPoint(mnTxHash, outputIndex);
+                // don't lock non-spendable outpoint (i.e. it's already spent or it's not from this wallet at all)
+                if(pwallet->IsMine(CTxIn(outpoint)) != ISMINE_SPENDABLE) {
+                    LogPrintf("  %s %s - IS NOT SPENDABLE, was not locked\n", mne.getTxHash(), mne.getOutputIndex());
+                    continue;
+                }
+                pwallet->LockCoin(outpoint);
+                LogPrintf("  %s %s - locked successfully\n", mne.getTxHash(), mne.getOutputIndex());
+            }
+        }
+    }
+#endif // ENABLE_WALLET
+
+    //lite mode disables all Masternode and Darksend related functionality
+    fLiteMode = gArgs.GetBoolArg("-litemode", false);
+    if(fMasterNode && fLiteMode){
+        return InitError("You can not start a masternode in litemode");
+    }
+
+    LogPrintf("fLiteMode %d\n", fLiteMode);
+
+    // ********************************************************* Step 11b: Load cache data
+
+    // LOAD SERIALIZED DAT FILES INTO DATA CACHES FOR INTERNAL USE
+
+    boost::filesystem::path pathDB = GetDataDir();
+    std::string strDBName;
+
+    strDBName = "mncache.dat";
+    uiInterface.InitMessage(_("Loading masternode cache..."));
+    CFlatDB<CMasternodeMan> flatdb1(strDBName, "magicMasternodeCache");
+    if(!flatdb1.Load(mnodeman)) {
+        return InitError(_("Failed to load masternode cache from") + "\n" + (pathDB / strDBName).string());
+    }
+
+    if(mnodeman.size()) {
+        strDBName = "mnpayments.dat";
+        uiInterface.InitMessage(_("Loading masternode payment cache..."));
+        CFlatDB<CMasternodePayments> flatdb2(strDBName, "magicMasternodePaymentsCache");
+        if(!flatdb2.Load(mnpayments)) {
+            return InitError(_("Failed to load masternode payments cache from") + "\n" + (pathDB / strDBName).string());
+        }
+
+        strDBName = "governance.dat";
+        uiInterface.InitMessage(_("Loading governance cache..."));
+        CFlatDB<CGovernanceManager> flatdb3(strDBName, "magicGovernanceCache");
+        if(!flatdb3.Load(governance)) {
+            return InitError(_("Failed to load governance cache from") + "\n" + (pathDB / strDBName).string());
+        }
+        governance.InitOnLoad();
+    } else {
+        uiInterface.InitMessage(_("Masternode cache is empty, skipping payments and governance cache..."));
+    }
+
+    strDBName = "netfulfilled.dat";
+    uiInterface.InitMessage(_("Loading fulfilled requests cache..."));
+    CFlatDB<CNetFulfilledRequestManager> flatdb4(strDBName, "magicFulfilledCache");
+    if(!flatdb4.Load(netfulfilledman)) {
+        return InitError(_("Failed to load fulfilled requests cache from") + "\n" + (pathDB / strDBName).string());
+    }
+
+    // ********************************************************* Step 11c: update block tip in Masternode modules
+
+    // force UpdatedBlockTip to initialize nCachedBlockHeight for DS, MN payments and budgets
+    // but don't call it directly to prevent triggering of other listeners like zmq etc.
+    // GetMainSignals().UpdatedBlockTip(chainActive.Tip());
+    pdsNotificationInterface->InitializeCurrentBlockTip();
+
+    // ********************************************************* Step 11d: start masternode-ps-<smth> threads
+
+    if (fMasterNode)
+        threadGroup.create_thread(boost::bind(&ThreadCheckMasternode, boost::ref(*g_connman)));
 
     // ********************************************************* Step 12: start node
 

@@ -6,6 +6,7 @@
 #ifndef BITCOIN_CONSENSUS_PARAMS_H
 #define BITCOIN_CONSENSUS_PARAMS_H
 
+#include <amount.h>
 #include <uint256.h>
 #include <limits>
 #include <map>
@@ -49,6 +50,24 @@ struct BIP9Deployment {
 struct Params {
     uint256 hashGenesisBlock;
     int nSubsidyHalvingInterval;
+
+    CAmount nMinimumSubsidy;
+
+    int nMasternodeMinimumConfirmations;
+    int nMasternodePaymentsStartBlock;
+    int nMasternodeCollateral; // in coins
+
+    int nBudgetPaymentsStartBlock;
+    int nBudgetPaymentsCycleBlocks;
+    int nBudgetPaymentsWindowBlocks;
+    int nBudgetProposalEstablishingTime; // in seconds
+
+    int nSuperblockStartBlock;
+    int nSuperblockCycle; // in blocks
+
+    int nGovernanceMinQuorum; // Min absolute vote count to trigger an action
+    int nGovernanceFilterElements;
+
     /* Block hash that is excepted from BIP16 enforcement */
     uint256 BIP16Exception;
     /** Block height and hash at which BIP34 becomes active */
@@ -75,6 +94,7 @@ struct Params {
     int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacing; }
     uint256 nMinimumChainWork;
     uint256 defaultAssumeValid;
+    int nlastValidPowHashHeight;
 };
 } // namespace Consensus
 

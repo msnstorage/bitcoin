@@ -16,6 +16,8 @@
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <validation.h>
+#include <masternodeman.h>
+#include <masternode-sync.h>
 #include <net.h>
 #include <netbase.h>
 #include <txmempool.h>
@@ -47,6 +49,11 @@ ClientModel::ClientModel(interfaces::Node& node, OptionsModel *_optionsModel, QO
     connect(pollTimer, &QTimer::timeout, this, &ClientModel::updateTimer);
     pollTimer->start(MODEL_UPDATE_DELAY);
 
+    pollMnTimer = new QTimer(this);
+    connect(pollMnTimer, &QTimer::timeout, this, &ClientModel::updateMnTimer);
+    // no need to update as frequent as data for balances/txes/blocks
+    pollMnTimer->start(MODEL_UPDATE_DELAY * 4);
+
     subscribeToCoreSignals();
 }
 
@@ -67,6 +74,17 @@ int ClientModel::getNumConnections(unsigned int flags) const
         connections = CConnman::CONNECTIONS_ALL;
 
     return m_node.getNodeCount(connections);
+}
+
+QString ClientModel::getMasternodeCountString() const
+{
+    // return tr("Total: %1 (PS compatible: %2 / Enabled: %3) (IPv4: %4, IPv6: %5, TOR: %6)").arg(QString::number((int)mnodeman.size()))
+    return tr("Total: %1 (Enabled: %2)")
+            .arg(QString::number((int)mnodeman.size()))
+            .arg(QString::number((int)mnodeman.CountEnabled()));
+            // .arg(QString::number((int)mnodeman.CountByIP(NET_IPV4)))
+            // .arg(QString::number((int)mnodeman.CountByIP(NET_IPV6)))
+            // .arg(QString::number((int)mnodeman.CountByIP(NET_TOR)));
 }
 
 int ClientModel::getHeaderTipHeight() const
@@ -103,6 +121,18 @@ void ClientModel::updateTimer()
     // the following calls will acquire the required lock
     Q_EMIT mempoolSizeChanged(m_node.getMempoolSize(), m_node.getMempoolDynamicUsage());
     Q_EMIT bytesChanged(m_node.getTotalBytesRecv(), m_node.getTotalBytesSent());
+}
+
+void ClientModel::updateMnTimer()
+{
+    QString newMasternodeCountString = getMasternodeCountString();
+
+    if (cachedMasternodeCountString != newMasternodeCountString)
+    {
+        cachedMasternodeCountString = newMasternodeCountString;
+
+        Q_EMIT strMasternodesChanged(cachedMasternodeCountString);
+    }
 }
 
 void ClientModel::updateNumConnections(int numConnections)
@@ -255,6 +285,12 @@ static void BlockTipChanged(ClientModel *clientmodel, bool initialSync, int heig
     }
 }
 
+static void NotifyAdditionalDataSyncProgressChanged(ClientModel *clientmodel, double nSyncProgress)
+{
+    QMetaObject::invokeMethod(clientmodel, "additionalDataSyncProgressChanged", Qt::QueuedConnection,
+                              Q_ARG(double, nSyncProgress));
+}
+
 void ClientModel::subscribeToCoreSignals()
 {
     // Connect signals to client
@@ -265,6 +301,7 @@ void ClientModel::subscribeToCoreSignals()
     m_handler_banned_list_changed = m_node.handleBannedListChanged(std::bind(BannedListChanged, this));
     m_handler_notify_block_tip = m_node.handleNotifyBlockTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, false));
     m_handler_notify_header_tip = m_node.handleNotifyHeaderTip(std::bind(BlockTipChanged, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3, std::placeholders::_4, true));
+    m_handler_notify_additional_data_sync_progress_changed = m_node.handleNotifyAdditionalDataSyncProgressChanged(std::bind(NotifyAdditionalDataSyncProgressChanged, this, std::placeholders::_1));
 }
 
 void ClientModel::unsubscribeFromCoreSignals()
@@ -277,6 +314,7 @@ void ClientModel::unsubscribeFromCoreSignals()
     m_handler_banned_list_changed->disconnect();
     m_handler_notify_block_tip->disconnect();
     m_handler_notify_header_tip->disconnect();
+    m_handler_notify_additional_data_sync_progress_changed->disconnect();
 }
 
 bool ClientModel::getProxyInfo(std::string& ip_port) const

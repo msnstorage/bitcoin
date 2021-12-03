@@ -146,6 +146,9 @@ QT_FORMS_UI = \
   qt/forms/signverifymessagedialog.ui \
   qt/forms/transactiondescdialog.ui
 
+QT_FORMS_UI += \
+  qt/forms/masternodelist.ui
+
 QT_MOC_CPP = \
   qt/moc_addressbookpage.cpp \
   qt/moc_addresstablemodel.cpp \
@@ -194,6 +197,9 @@ QT_MOC_CPP = \
   qt/moc_walletframe.cpp \
   qt/moc_walletmodel.cpp \
   qt/moc_walletview.cpp
+
+QT_MOC_CPP += \
+  qt/moc_masternodelist.cpp
 
 BITCOIN_MM = \
   qt/macdockiconhandler.mm \
@@ -278,6 +284,9 @@ BITCOIN_QT_H = \
   qt/walletview.h \
   qt/winshutdownmonitor.h
 
+BITCOIN_QT_H += \
+  qt/masternodelist.h
+
 RES_ICONS = \
   qt/res/icons/add.png \
   qt/res/icons/address-book.png \
@@ -336,6 +345,9 @@ RES_ICONS = \
   qt/res/icons/warning.png \
   qt/res/icons/verify.png
 
+RES_ICONS += \
+  qt/res/icons/masternodes.png
+
 BITCOIN_QT_BASE_CPP = \
   qt/bantablemodel.cpp \
   qt/bitcoin.cpp \
@@ -390,6 +402,9 @@ BITCOIN_QT_WALLET_CPP = \
   qt/walletmodel.cpp \
   qt/walletmodeltransaction.cpp \
   qt/walletview.cpp
+
+BITCOIN_QT_WALLET_CPP += \
+  qt/masternodelist.cpp
 
 BITCOIN_QT_WALLET_BIP70_CPP = \
   qt/paymentrequestplus.cpp

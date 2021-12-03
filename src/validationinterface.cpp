@@ -28,14 +28,22 @@ struct ValidationInterfaceConnections {
     boost::signals2::scoped_connection Broadcast;
     boost::signals2::scoped_connection BlockChecked;
     boost::signals2::scoped_connection NewPoWValidBlock;
+    boost::signals2::scoped_connection AcceptedBlockHeader;
+    boost::signals2::scoped_connection NotifyHeaderTip;
+    boost::signals2::scoped_connection SyncTransaction;
+    boost::signals2::scoped_connection NotifyTransactionLock;
 };
 
 struct MainSignalsInstance {
+    boost::signals2::signal<void (const CBlockIndex *)> AcceptedBlockHeader;
+    boost::signals2::signal<void (const CBlockIndex *, bool fInitialDownload)> NotifyHeaderTip;
     boost::signals2::signal<void (const CBlockIndex *, const CBlockIndex *, bool fInitialDownload)> UpdatedBlockTip;
+    boost::signals2::signal<void (const CTransaction &, const CBlock *)> SyncTransaction;
     boost::signals2::signal<void (const CTransactionRef &)> TransactionAddedToMempool;
     boost::signals2::signal<void (const std::shared_ptr<const CBlock> &, const CBlockIndex *pindex, const std::vector<CTransactionRef>&)> BlockConnected;
     boost::signals2::signal<void (const std::shared_ptr<const CBlock> &)> BlockDisconnected;
     boost::signals2::signal<void (const CTransactionRef &)> TransactionRemovedFromMempool;
+    boost::signals2::signal<void (const CTransaction &)> NotifyTransactionLock;
     boost::signals2::signal<void (const CBlockLocator &)> ChainStateFlushed;
     boost::signals2::signal<void (int64_t nBestBlockTime, CConnman* connman)> Broadcast;
     boost::signals2::signal<void (const CBlock&, const CValidationState&)> BlockChecked;
@@ -104,6 +112,10 @@ void RegisterValidationInterface(CValidationInterface* pwalletIn) {
     conns.Broadcast = g_signals.m_internals->Broadcast.connect(std::bind(&CValidationInterface::ResendWalletTransactions, pwalletIn, std::placeholders::_1, std::placeholders::_2));
     conns.BlockChecked = g_signals.m_internals->BlockChecked.connect(std::bind(&CValidationInterface::BlockChecked, pwalletIn, std::placeholders::_1, std::placeholders::_2));
     conns.NewPoWValidBlock = g_signals.m_internals->NewPoWValidBlock.connect(std::bind(&CValidationInterface::NewPoWValidBlock, pwalletIn, std::placeholders::_1, std::placeholders::_2));
+    conns.AcceptedBlockHeader = g_signals.m_internals->AcceptedBlockHeader.connect(std::bind(&CValidationInterface::AcceptedBlockHeader, pwalletIn, std::placeholders::_1));
+    conns.NotifyHeaderTip = g_signals.m_internals->NotifyHeaderTip.connect(std::bind(&CValidationInterface::NotifyHeaderTip, pwalletIn, std::placeholders::_1, std::placeholders::_2));
+    conns.SyncTransaction = g_signals.m_internals->SyncTransaction.connect(std::bind(&CValidationInterface::SyncTransaction, pwalletIn, std::placeholders::_1, std::placeholders::_2));
+    conns.NotifyTransactionLock = g_signals.m_internals->NotifyTransactionLock.connect(std::bind(&CValidationInterface::NotifyTransactionLock, pwalletIn, std::placeholders::_1));
 }
 
 void UnregisterValidationInterface(CValidationInterface* pwalletIn) {
@@ -141,6 +153,18 @@ void CMainSignals::MempoolEntryRemoved(CTransactionRef ptx, MemPoolRemovalReason
     }
 }
 
+void CMainSignals::AcceptedBlockHeader(const CBlockIndex *pindexNew) {
+    m_internals->m_schedulerClient.AddToProcessQueue([pindexNew, this] {
+        m_internals->AcceptedBlockHeader(pindexNew);
+    });
+}
+
+void CMainSignals::NotifyHeaderTip(const CBlockIndex *pindexNew, bool fInitialDownload) {
+    m_internals->m_schedulerClient.AddToProcessQueue([pindexNew, fInitialDownload, this] {
+        m_internals->NotifyHeaderTip(pindexNew, fInitialDownload);
+    });
+}
+
 void CMainSignals::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlockIndex *pindexFork, bool fInitialDownload) {
     // Dependencies exist that require UpdatedBlockTip events to be delivered in the order in which
     // the chain actually updates. One way to ensure this is for the caller to invoke this signal
@@ -148,6 +172,12 @@ void CMainSignals::UpdatedBlockTip(const CBlockIndex *pindexNew, const CBlockInd
 
     m_internals->m_schedulerClient.AddToProcessQueue([pindexNew, pindexFork, fInitialDownload, this] {
         m_internals->UpdatedBlockTip(pindexNew, pindexFork, fInitialDownload);
+    });
+}
+
+void CMainSignals::SyncTransaction(const CTransaction &tx, const CBlock *pblock) {
+    m_internals->m_schedulerClient.AddToProcessQueue([tx, pblock, this] {
+        m_internals->SyncTransaction(tx, pblock);
     });
 }
 
@@ -166,6 +196,12 @@ void CMainSignals::BlockConnected(const std::shared_ptr<const CBlock> &pblock, c
 void CMainSignals::BlockDisconnected(const std::shared_ptr<const CBlock> &pblock) {
     m_internals->m_schedulerClient.AddToProcessQueue([pblock, this] {
         m_internals->BlockDisconnected(pblock);
+    });
+}
+
+void CMainSignals::NotifyTransactionLock(const CTransaction &tx) {
+    m_internals->m_schedulerClient.AddToProcessQueue([tx, this] {
+        m_internals->NotifyTransactionLock(tx);
     });
 }
 

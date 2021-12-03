@@ -448,6 +448,13 @@ public:
     }
 
     template<typename T>
+    unsigned int GetSerializeSize(const T& obj)
+    {
+        // Tells the size of the object if serialized to this stream
+        return ::GetSerializeSize(obj, nType, nVersion);
+    }
+
+    template<typename T>
     CDataStream& operator<<(const T& obj)
     {
         // Serialize to this stream

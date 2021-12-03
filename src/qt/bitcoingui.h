@@ -37,6 +37,7 @@ class WalletController;
 class WalletFrame;
 class WalletModel;
 class HelpMessageDialog;
+class MasternodeList;
 class ModalOverlay;
 
 namespace interfaces {
@@ -128,6 +129,7 @@ private:
     QToolBar* appToolBar = nullptr;
     QAction* overviewAction = nullptr;
     QAction* historyAction = nullptr;
+    QAction* masternodeAction = nullptr;
     QAction* quitAction = nullptr;
     QAction* sendCoinsAction = nullptr;
     QAction* sendCoinsMenuAction = nullptr;
@@ -145,6 +147,7 @@ private:
     QAction* changePassphraseAction = nullptr;
     QAction* aboutQtAction = nullptr;
     QAction* openRPCConsoleAction = nullptr;
+    QAction* openMNConfEditorAction = nullptr;
     QAction* openAction = nullptr;
     QAction* showHelpMessageAction = nullptr;
     QAction* m_open_wallet_action{nullptr};
@@ -212,6 +215,8 @@ public Q_SLOTS:
     void setNetworkActive(bool networkActive);
     /** Set number of blocks and last block date shown in the UI */
     void setNumBlocks(int count, const QDateTime& blockDate, double nVerificationProgress, bool headers);
+    /** Set additional data sync status shown in the UI */
+    void setAdditionalDataSyncProgress(double nSyncProgress);
 
     /** Notify the user of an event from the core network or transaction handling code.
        @param[in] title     the message box / notification title
@@ -260,6 +265,10 @@ public Q_SLOTS:
     void gotoOverviewPage();
     /** Switch to history (transactions) page */
     void gotoHistoryPage();
+
+    /** Switch to masternode page */
+    void gotoMasternodePage();
+
     /** Switch to receive coins page */
     void gotoReceiveCoinsPage();
     /** Switch to send coins page */
@@ -281,6 +290,8 @@ public Q_SLOTS:
     void showDebugWindow();
     /** Show debug window and set focus to the console */
     void showDebugWindowActivateConsole();
+    /** Open external (default) editor with masternode.conf */
+    void showMNConfEditor();
     /** Show help message dialog */
     void showHelpMessageClicked();
 #ifndef Q_OS_MAC

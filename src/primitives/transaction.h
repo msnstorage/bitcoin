@@ -54,6 +54,7 @@ public:
     }
 
     std::string ToString() const;
+    std::string ToStringShort() const;
 };
 
 /** An input of a transaction.  It contains the location of the previous
@@ -122,6 +123,11 @@ public:
     friend bool operator!=(const CTxIn& a, const CTxIn& b)
     {
         return !(a == b);
+    }
+
+    friend bool operator<(const CTxIn& a, const CTxIn& b)
+    {
+        return a.prevout<b.prevout;
     }
 
     std::string ToString() const;
@@ -301,8 +307,10 @@ public:
     /** Construct a CTransaction that qualifies as IsNull() */
     CTransaction();
 
+    CTransaction& operator=(const CTransaction& tx) { return *this; };
+
     /** Convert a CMutableTransaction into a CTransaction. */
-    explicit CTransaction(const CMutableTransaction &tx);
+    CTransaction(const CMutableTransaction &tx);
     CTransaction(CMutableTransaction &&tx);
 
     template <typename Stream>
@@ -393,6 +401,13 @@ struct CMutableTransaction
      * fly, as opposed to GetHash() in CTransaction, which uses a cached result.
      */
     uint256 GetHash() const;
+
+    std::string ToString() const;
+
+    friend bool operator==(const CMutableTransaction& a, const CMutableTransaction& b)
+    {
+        return a.GetHash() == b.GetHash();
+    }
 
     bool HasWitness() const
     {

@@ -96,6 +96,9 @@ public:
     /** Network activity state changed. */
     ADD_SIGNALS_DECL_WRAPPER(NotifyNetworkActiveChanged, void, bool networkActive);
 
+    /** Number of masternodes changed. */
+    ADD_SIGNALS_DECL_WRAPPER(NotifyStrMasternodeCountChanged, void, int newNumMasternodes);
+
     /**
      * Status bar alerts changed.
      */
@@ -115,6 +118,9 @@ public:
 
     /** Best header has changed */
     ADD_SIGNALS_DECL_WRAPPER(NotifyHeaderTip, void, bool, const CBlockIndex*);
+
+    /** Additional data sync progress changed */
+    ADD_SIGNALS_DECL_WRAPPER(NotifyAdditionalDataSyncProgressChanged, void, double nSyncProgress);
 
     /** Banlist did change. */
     ADD_SIGNALS_DECL_WRAPPER(BannedListChanged, void, void);

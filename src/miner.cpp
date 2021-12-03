@@ -14,6 +14,9 @@
 #include <consensus/tx_verify.h>
 #include <consensus/validation.h>
 #include <hash.h>
+#include <key_io.h>
+#include <masternode-payments.h>
+#include <masternode-sync.h>
 #include <net.h>
 #include <policy/feerate.h>
 #include <policy/policy.h>
@@ -29,17 +32,45 @@
 #include <queue>
 #include <utility>
 
-int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
+int64_t UpdateTime(CBlock* pblock, const Consensus::Params& consensusParams, const CBlockIndex* pindexPrev)
 {
     int64_t nOldTime = pblock->nTime;
     int64_t nNewTime = std::max(pindexPrev->GetMedianTimePast()+1, GetAdjustedTime());
 
     if (nOldTime < nNewTime)
-        pblock->nTime = nNewTime;
+    {
+        // We have to know original fees
+        CAmount nFees = pblock->vtx[0]->GetValueOut() - GetBlockSubsidy(pindexPrev->nHeight + 1, pblock->GetBlockHeader(), consensusParams);
 
-    // Updating time can change work required on testnet:
-    if (consensusParams.fPowAllowMinDifficultyBlocks)
+        pblock->nTime = nNewTime;
+        // Parameter consensusParams.fPowAllowMinDifficultyBlocks implemented into GetNextWorkRequired
         pblock->nBits = GetNextWorkRequired(pindexPrev, pblock, consensusParams);
+
+        // Calculate delta reward
+        CAmount nBlockReward = GetBlockSubsidy(pindexPrev->nHeight + 1, pblock->GetBlockHeader(), consensusParams);
+        CAmount nMasternodePayment = GetMasternodePayment(pindexPrev->nHeight + 1, nFees + nBlockReward);
+
+        // Update rewards if necessary
+        if (pblock->vtx[0]->GetValueOut() != nFees + nBlockReward) {
+            // Update coinbase output to new value
+            CMutableTransaction coinbaseTx(*pblock->vtx[0]);
+            coinbaseTx.vout[0].nValue = nFees + nBlockReward;
+
+            // Update masternode reward to new value
+            CScript cMasternodePayee;
+            if(mnpayments.GetBlockPayee(pindexPrev->nHeight + 1, cMasternodePayee)) {
+                for (unsigned int i = 0; i < coinbaseTx.vout.size(); i++) {
+                    if (coinbaseTx.vout[i].scriptPubKey == cMasternodePayee) {
+                        coinbaseTx.vout[0].nValue -= nMasternodePayment;
+                        coinbaseTx.vout[i].nValue = nMasternodePayment;
+                        break;
+                    }
+                }
+            }
+
+            pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
+        }
+    }
 
     return nNewTime - nOldTime;
 }
@@ -147,17 +178,27 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
 
     // Create coinbase transaction.
     CMutableTransaction coinbaseTx;
+    pblock->nBits=GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
+    CAmount nBlockReward = GetBlockSubsidy(nHeight, pblock->GetBlockHeader(), chainparams.GetConsensus());
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
     coinbaseTx.vout.resize(1);
     coinbaseTx.vout[0].scriptPubKey = scriptPubKeyIn;
-    coinbaseTx.vout[0].nValue = nFees + GetBlockSubsidy(nHeight, chainparams.GetConsensus());
+    coinbaseTx.vout[0].nValue = nFees + nBlockReward;
     coinbaseTx.vin[0].scriptSig = CScript() << nHeight << OP_0;
+
+    // Update coinbase transaction with additional info about masternode and governance payments,
+    // get some info back to pass to getblocktemplate
+    FillBlockPayments(coinbaseTx, nHeight, nFees + nBlockReward, pblock->txoutMasternode, pblock->voutSuperblock);
+    LogPrintf("CreateNewBlock -- nBlockHeight %d blockReward %lld txoutMasternode %s txNew %s\n",
+                 nHeight, nFees + nBlockReward, pblock->txoutMasternode.ToString(), coinbaseTx.ToString());
+
     pblock->vtx[0] = MakeTransactionRef(std::move(coinbaseTx));
     pblocktemplate->vchCoinbaseCommitment = GenerateCoinbaseCommitment(*pblock, pindexPrev, chainparams.GetConsensus());
     pblocktemplate->vTxFees[0] = -nFees;
 
     LogPrintf("CreateNewBlock(): block weight: %u txs: %u fees: %ld sigops %d\n", GetBlockWeight(*pblock), nBlockTx, nFees, nBlockSigOpsCost);
+    LogPrintf("CreateNewBlock(): block height: %ld pow reward: %ld pos reward: %ld masternode reward: %ld\n", nHeight, nBlockReward, 0, GetMasternodePayment(nHeight, nFees + nBlockReward));
 
     // Fill in header
     pblock->hashPrevBlock  = pindexPrev->GetBlockHash();

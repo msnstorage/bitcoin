@@ -11,8 +11,12 @@
 #include <blockencodings.h>
 #include <chainparams.h>
 #include <consensus/validation.h>
+#include <governance.h>
 #include <hash.h>
 #include <validation.h>
+#include <masternode-payments.h>
+#include <masternode-sync.h>
+#include <masternodeman.h>
 #include <merkleblock.h>
 #include <netmessagemaker.h>
 #include <netbase.h>
@@ -25,6 +29,7 @@
 #include <scheduler.h>
 #include <tinyformat.h>
 #include <txmempool.h>
+#include <spork.h>
 #include <ui_interface.h>
 #include <util/system.h>
 #include <util/moneystr.h>
@@ -1069,6 +1074,24 @@ bool static AlreadyHave(const CInv& inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main)
     case MSG_BLOCK:
     case MSG_WITNESS_BLOCK:
         return LookupBlockIndex(inv.hash) != nullptr;
+    case MSG_SPORK:
+        return mapSporks.count(inv.hash);
+    case MSG_MASTERNODE_PAYMENT_VOTE:
+        return mnpayments.mapMasternodePaymentVotes.count(inv.hash);
+    case MSG_MASTERNODE_PAYMENT_BLOCK:
+        {
+            BlockMap::iterator mi = mapBlockIndex.find(inv.hash);
+            return mi != mapBlockIndex.end() && mnpayments.mapMasternodeBlocks.find(mi->second->nHeight) != mnpayments.mapMasternodeBlocks.end();
+        }
+    case MSG_MASTERNODE_ANNOUNCE:
+        return mnodeman.mapSeenMasternodeBroadcast.count(inv.hash) && !mnodeman.IsMnbRecoveryRequested(inv.hash);
+    case MSG_MASTERNODE_PING:
+        return mnodeman.mapSeenMasternodePing.count(inv.hash);
+    case MSG_GOVERNANCE_OBJECT:
+    case MSG_GOVERNANCE_OBJECT_VOTE:
+        return ! governance.ConfirmInventoryRequest(inv);
+    case MSG_MASTERNODE_VERIFY:
+        return mnodeman.mapSeenMasternodeVerification.count(inv.hash);
     }
     // Don't know what it is, just say we already got one
     return true;
@@ -1284,7 +1307,11 @@ void static ProcessGetData(CNode* pfrom, const CChainParams& chainparams, CConnm
     {
         LOCK(cs_main);
 
-        while (it != pfrom->vRecvGetData.end() && (it->type == MSG_TX || it->type == MSG_WITNESS_TX)) {
+        while (it != pfrom->vRecvGetData.end() && (it->type == MSG_TX || it->type == MSG_WITNESS_TX ||
+            it->type == MSG_SPORK || it->type == MSG_MASTERNODE_PAYMENT_VOTE || it->type == MSG_MASTERNODE_PAYMENT_BLOCK ||
+            it->type == MSG_MASTERNODE_ANNOUNCE || it->type == MSG_MASTERNODE_PING ||
+            it->type == MSG_GOVERNANCE_OBJECT || it->type == MSG_GOVERNANCE_OBJECT_VOTE || it->type == MSG_MASTERNODE_VERIFY))
+        {
             if (interruptMsgProc)
                 return;
             // Don't bother if send buffer is too full to respond anyway
@@ -1294,6 +1321,12 @@ void static ProcessGetData(CNode* pfrom, const CChainParams& chainparams, CConnm
             const CInv &inv = *it;
             it++;
 
+            LogPrint(BCLog::NET, "ProcessGetData -- inv = %s\n", inv.ToString());
+
+          // Original Bitcoin Core processor for non-masternode messages only
+          if (!(inv.type == MSG_SPORK || inv.type == MSG_MASTERNODE_PAYMENT_VOTE || inv.type == MSG_MASTERNODE_PAYMENT_BLOCK || inv.type == MSG_MASTERNODE_ANNOUNCE ||
+              inv.type == MSG_MASTERNODE_PING || inv.type == MSG_GOVERNANCE_OBJECT ||
+              inv.type == MSG_GOVERNANCE_OBJECT_VOTE || inv.type == MSG_MASTERNODE_VERIFY)) {
             // Send stream from relay memory
             bool push = false;
             auto mi = mapRelay.find(inv.hash);
@@ -1313,6 +1346,134 @@ void static ProcessGetData(CNode* pfrom, const CChainParams& chainparams, CConnm
             if (!push) {
                 vNotFound.push_back(inv);
             }
+          } else {
+            {
+                // Send stream from relay memory
+                bool pushed = false;
+                {
+                    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                    {
+                        LOCK(cs_mapRelayDash);
+                        map<CInv, CDataStream>::iterator mi = mapRelayDash.find(inv);
+                        if (mi != mapRelayDash.end()) {
+                            ss += (*mi).second;
+                            pushed = true;
+                        }
+                    }
+                    if(pushed)
+                        connman->PushMessage(pfrom, msgMaker.Make(inv.GetCommand(), ss));
+                }
+
+                if (!pushed && inv.type == MSG_SPORK) {
+                    if(mapSporks.count(inv.hash)) {
+                        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                        ss.reserve(1000);
+                        ss << mapSporks[inv.hash];
+                        connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::SPORK, ss));
+                        pushed = true;
+                    }
+                }
+
+                if (!pushed && inv.type == MSG_MASTERNODE_PAYMENT_VOTE) {
+                    if(mnpayments.HasVerifiedPaymentVote(inv.hash)) {
+                        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                        ss.reserve(1000);
+                        ss << mnpayments.mapMasternodePaymentVotes[inv.hash];
+                        connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::MASTERNODEPAYMENTVOTE, ss));
+                        pushed = true;
+                    }
+                }
+
+                if (!pushed && inv.type == MSG_MASTERNODE_PAYMENT_BLOCK) {
+                    BlockMap::iterator mi = mapBlockIndex.find(inv.hash);
+                    LOCK(cs_mapMasternodeBlocks);
+                    if (mi != mapBlockIndex.end() && mnpayments.mapMasternodeBlocks.count(mi->second->nHeight)) {
+                        for (CMasternodePayee& payee : mnpayments.mapMasternodeBlocks[mi->second->nHeight].vecPayees) {
+                            std::vector<uint256> vecVoteHashes = payee.GetVoteHashes();
+                            for (uint256& hash : vecVoteHashes) {
+                                if(mnpayments.HasVerifiedPaymentVote(hash)) {
+                                    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                                    ss.reserve(1000);
+                                    ss << mnpayments.mapMasternodePaymentVotes[hash];
+                                    connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::MASTERNODEPAYMENTVOTE, ss));
+                                }
+                            }
+                        }
+                        pushed = true;
+                    }
+                }
+
+                if (!pushed && inv.type == MSG_MASTERNODE_ANNOUNCE) {
+                    if(mnodeman.mapSeenMasternodeBroadcast.count(inv.hash)){
+                        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                        ss.reserve(1000);
+                        ss << mnodeman.mapSeenMasternodeBroadcast[inv.hash].second;
+                        connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::MNANNOUNCE, ss));
+                        pushed = true;
+                    }
+                }
+
+                if (!pushed && inv.type == MSG_MASTERNODE_PING) {
+                    if(mnodeman.mapSeenMasternodePing.count(inv.hash)) {
+                        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                        ss.reserve(1000);
+                        ss << mnodeman.mapSeenMasternodePing[inv.hash];
+                        connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::MNPING, ss));
+                        pushed = true;
+                    }
+                }
+
+                if (!pushed && inv.type == MSG_GOVERNANCE_OBJECT) {
+                    LogPrint(BCLog::NET, "ProcessGetData -- MSG_GOVERNANCE_OBJECT: inv = %s\n", inv.ToString());
+                    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                    bool topush = false;
+                    {
+                        if(governance.HaveObjectForHash(inv.hash)) {
+                            ss.reserve(1000);
+                            if(governance.SerializeObjectForHash(inv.hash, ss)) {
+                                topush = true;
+                            }
+                        }
+                    }
+                    LogPrint(BCLog::NET, "ProcessGetData -- MSG_GOVERNANCE_OBJECT: topush = %d, inv = %s\n", topush, inv.ToString());
+                    if(topush) {
+                        connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::MNGOVERNANCEOBJECT, ss));
+                        pushed = true;
+                    }
+                }
+
+                if (!pushed && inv.type == MSG_GOVERNANCE_OBJECT_VOTE) {
+                    CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                    bool topush = false;
+                    {
+                        if(governance.HaveVoteForHash(inv.hash)) {
+                            ss.reserve(1000);
+                            if(governance.SerializeVoteForHash(inv.hash, ss)) {
+                                topush = true;
+                            }
+                        }
+                    }
+                    if(topush) {
+                        LogPrint(BCLog::NET, "ProcessGetData -- pushing: inv = %s\n", inv.ToString());
+                        connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::MNGOVERNANCEOBJECTVOTE, ss));
+                        pushed = true;
+                    }
+                }
+
+                if (!pushed && inv.type == MSG_MASTERNODE_VERIFY) {
+                    if(mnodeman.mapSeenMasternodeVerification.count(inv.hash)) {
+                        CDataStream ss(SER_NETWORK, PROTOCOL_VERSION);
+                        ss.reserve(1000);
+                        ss << mnodeman.mapSeenMasternodeVerification[inv.hash];
+                        connman->PushMessage(pfrom, msgMaker.Make(NetMsgType::MNVERIFY, ss));
+                        pushed = true;
+                    }
+                }
+
+                if (!pushed)
+                    vNotFound.push_back(inv);
+            }
+          }
         }
     } // release cs_main
 
@@ -1743,6 +1904,10 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
                 connman->PushMessage(pfrom, CNetMsgMaker(INIT_PROTO_VERSION).Make(NetMsgType::REJECT, strCommand, REJECT_OBSOLETE,
                                    strprintf("Version must be %d or greater", MIN_PEER_PROTO_VERSION)));
             }
+            // obsolete peers are very annoying
+            if (g_banman) {
+                g_banman->Ban(pfrom->addr, BanReasonNodeMisbehaving);
+            }
             pfrom->fDisconnect = true;
             return false;
         }
@@ -1852,12 +2017,6 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         int64_t nTimeOffset = nTime - GetTime();
         pfrom->nTimeOffset = nTimeOffset;
         AddTimeData(pfrom->addr, nTimeOffset);
-
-        // If the peer is old enough to have the old alert system, send it the final alert.
-        if (pfrom->nVersion <= 70012) {
-            CDataStream finalAlert(ParseHex("60010000000000000000000000ffffff7f00000000ffffff7ffeffff7f01ffffff7f00000000ffffff7f00ffffff7f002f555247454e543a20416c657274206b657920636f6d70726f6d697365642c2075706772616465207265717569726564004630440220653febd6410f470f6bae11cad19c48413becb1ac2c17f908fd0fd53bdc3abd5202206d0e9c96fe88d4a0f01ed9dedae2b6f9e00da94cad0fecaae66ecf689bf71b50"), SER_NETWORK, PROTOCOL_VERSION);
-            connman->PushMessage(pfrom, CNetMsgMaker(nSendVersion).Make("alert", finalAlert));
-        }
 
         // Feeler connections exist only to verify if address is online.
         if (pfrom->fFeeler) {
@@ -2960,6 +3119,29 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         // message would be undesirable as we transmit it ourselves.
         return true;
     }
+    else
+    {
+        bool found = false;
+        const std::vector<std::string> &allMessages = getAllNetMessageTypes();
+        for (const std::string msg : allMessages) {
+            if(msg == strCommand) {
+                found = true;
+                break;
+            }
+        }
+
+        if (found)
+        {
+            //probably one the extensions
+            mnodeman.ProcessMessage(pfrom, strCommand, vRecv, *connman);
+            mnpayments.ProcessMessage(pfrom, strCommand, vRecv, *connman);
+            sporkManager.ProcessSpork(pfrom, strCommand, vRecv, *connman);
+            masternodeSync.ProcessMessage(pfrom, strCommand, vRecv);
+            governance.ProcessMessage(pfrom, strCommand, vRecv, *connman);
+
+            return true;
+        }
+    }
 
     // Ignore unknown commands for extensibility
     LogPrint(BCLog::NET, "Unknown command \"%s\" from peer=%d\n", SanitizeString(strCommand), pfrom->GetId());
@@ -3534,6 +3716,18 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
                             pto->GetId(), hashToAnnounce.ToString());
                     }
                 }
+            } else if (!vHeaders.empty()) {
+                if (vHeaders.size() > 1) {
+                    LogPrint(BCLog::NET, "%s: %u headers, range (%s, %s), to peer=%d\n", __func__,
+                            vHeaders.size(),
+                            vHeaders.front().GetHash().ToString(),
+                            vHeaders.back().GetHash().ToString(), pto->GetId());
+                } else {
+                    LogPrint(BCLog::NET, "%s: sending header %s to peer=%d\n", __func__,
+                            vHeaders.front().GetHash().ToString(), pto->GetId());
+                }
+                connman->PushMessage(pto, msgMaker.Make(NetMsgType::HEADERS, vHeaders));
+                state.pindexBestHeaderSent = pBestIndex;
             }
             pto->vBlockHashesToAnnounce.clear();
         }
@@ -3676,6 +3870,58 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
         if (!vInv.empty())
             connman->PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
 
+        vector<CInv> vInvWait;
+        {
+            bool fSendTrickle = pto->fWhitelisted;
+            if (pto->nNextInvSendDash < nNow) {
+                fSendTrickle = true;
+                pto->nNextInvSendDash = PoissonNextSend(nNow, INVENTORY_BROADCAST_INTERVAL >> !pto->fInbound);
+            }
+            LOCK(pto->cs_inventory);
+            vInv.reserve(std::min<size_t>(1000, pto->vInventoryToSend.size()));
+            vInvWait.reserve(pto->vInventoryToSend.size());
+            for (const CInv& inv : pto->vInventoryToSend)
+            {
+                if (inv.type == MSG_TX && pto->filterInventoryKnown.contains(inv.hash))
+                    continue;
+
+                // trickle out tx inv to protect privacy
+                if (inv.type == MSG_TX && !fSendTrickle)
+                {
+                    // 1/4 of tx invs blast to all immediately
+                    static uint256 hashSalt;
+                    if (hashSalt.IsNull())
+                        hashSalt = GetRandHash();
+                    uint256 hashRand = ArithToUint256(UintToArith256(inv.hash) ^ UintToArith256(hashSalt));
+                    hashRand = Hash(BEGIN(hashRand), END(hashRand));
+                    bool fTrickleWait = ((UintToArith256(hashRand) & 3) != 0);
+
+                    if (fTrickleWait)
+                    {
+                        LogPrint(BCLog::NET, "SendMessages -- queued inv(vInvWait): %s  index=%d peer=%d\n", inv.ToString(), vInvWait.size(), pto->GetId());
+                        vInvWait.push_back(inv);
+                        continue;
+                    }
+                }
+
+                pto->filterInventoryKnown.insert(inv.hash);
+
+                LogPrint(BCLog::NET, "SendMessages -- queued inv: %s  index=%d peer=%d\n", inv.ToString(), vInv.size(), pto->GetId());
+                vInv.push_back(inv);
+                if (vInv.size() >= 1000)
+                {
+                    LogPrint(BCLog::NET, "SendMessages -- pushing inv's: count=%d peer=%d\n", vInv.size(), pto->GetId());
+                    connman->PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
+                    vInv.clear();
+                }
+            }
+            pto->vInventoryToSend = vInvWait;
+        }
+        if (!vInv.empty()) {
+            connman->PushMessage(pto, msgMaker.Make(NetMsgType::INV, vInv));
+            LogPrint(BCLog::NET, "SendMessages -- pushing tailing inv's: count=%d peer=%d\n", vInv.size(), pto->GetId());
+        }
+
         // Detect whether we're stalling
         nNow = GetTimeMicros();
         if (state.nStallingSince && state.nStallingSince < nNow - 1000000 * BLOCK_STALLING_TIMEOUT) {
@@ -3773,16 +4019,20 @@ bool PeerLogicValidation::SendMessages(CNode* pto)
                 if (vGetData.size() >= 1000)
                 {
                     connman->PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+                    LogPrint(BCLog::NET, "Request pushed size = %lu peer=%d\n", vGetData.size(), pto->GetId());
                     vGetData.clear();
                 }
             } else {
                 //If we're not going to ask, don't expect a response.
+                LogPrint(BCLog::NET, "Request already have inv = %s peer=%d\n", inv.ToString(), pto->GetId());
                 pto->setAskFor.erase(inv.hash);
             }
             pto->mapAskFor.erase(pto->mapAskFor.begin());
         }
-        if (!vGetData.empty())
+        if (!vGetData.empty()) {
             connman->PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+            LogPrint(BCLog::NET, "Request tail pushed size = %lu peer=%d\n", vGetData.size(), pto->GetId());
+        }
 
         //
         // Message: feefilter

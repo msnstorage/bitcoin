@@ -14,6 +14,7 @@
 #include <interfaces/chain.h>
 #include <rpc/server.h>
 #include <init.h>
+#include <masternodeconfig.h>
 #include <noui.h>
 #include <shutdown.h>
 #include <util/system.h>
@@ -109,6 +110,13 @@ static bool AppInit(int argc, char* argv[])
             SelectParams(gArgs.GetChainName());
         } catch (const std::exception& e) {
             tfm::format(std::cerr, "Error: %s\n", e.what());
+            return false;
+        }
+
+        // parse masternode.conf
+        std::string strErr;
+        if(!masternodeConfig.read(strErr)) {
+            tfm::format(std::cerr,"Error reading masternode configuration file: %s\n", strErr.c_str());
             return false;
         }
 

@@ -17,6 +17,9 @@
 #include <cuckoocache.h>
 #include <hash.h>
 #include <index/txindex.h>
+#include <key_io.h>
+#include <masternodeman.h>
+#include <masternode-payments.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
 #include <policy/rbf.h>
@@ -188,6 +191,9 @@ public:
 
     void UnloadBlockIndex();
 
+    bool DisconnectBlocks(int blocks);
+    void ReprocessBlocks(int nBlocks);
+
 private:
     bool ActivateBestChainStep(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexMostWork, const std::shared_ptr<const CBlock>& pblock, bool& fInvalidFound, ConnectTrace& connectTrace) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     bool ConnectTip(CValidationState& state, const CChainParams& chainparams, CBlockIndex* pindexNew, const std::shared_ptr<const CBlock>& pblock, ConnectTrace& connectTrace, DisconnectedBlockTransactions &disconnectpool) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
@@ -253,6 +259,8 @@ CAmount maxTxFee = DEFAULT_TRANSACTION_MAXFEE;
 CBlockPolicyEstimator feeEstimator;
 CTxMemPool mempool(&feeEstimator);
 std::atomic_bool g_is_mempool_loaded{false};
+
+map<uint256, int64_t> mapRejectedBlocks GUARDED_BY(cs_main);
 
 /** Constant stuff for coinbase transactions we create: */
 CScript COINBASE_FLAGS;
@@ -565,6 +573,31 @@ static bool CheckInputsFromMempoolAndCache(const CTransaction& tx, CValidationSt
     }
 
     return CheckInputs(tx, state, view, true, flags, cacheSigStore, true, txdata);
+}
+
+bool GetUTXOCoin(const COutPoint& outpoint, Coin& coin)
+{
+    LOCK(cs_main);
+    if (!pcoinsTip->GetCoin(outpoint, coin))
+        return false;
+    if (coin.IsSpent())
+        return false;
+    return true;
+}
+
+int GetUTXOHeight(const COutPoint& outpoint)
+{
+    // -1 means UTXO is yet unknown or already spent
+    Coin coin;
+    return GetUTXOCoin(outpoint, coin) ? coin.nHeight : -1;
+}
+
+int GetUTXOConfirmations(const COutPoint& outpoint)
+{
+    // -1 means UTXO is yet unknown or already spent
+    LOCK(cs_main);
+    int nPrevoutHeight = GetUTXOHeight(outpoint);
+    return (nPrevoutHeight > -1 && chainActive.Tip()) ? chainActive.Height() - nPrevoutHeight + 1 : -1;
 }
 
 static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool& pool, CValidationState& state, const CTransactionRef& ptx,
@@ -1151,7 +1184,7 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex
     return ReadRawBlockFromDisk(block, block_pos, message_start);
 }
 
-CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
+CAmount GetBlockSubsidy(int nHeight, CBlockHeader pblock, const Consensus::Params& consensusParams, bool fSuperblockPartOnly)
 {
     int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
     // Force block reward to zero when right shift is undefined.
@@ -1160,8 +1193,40 @@ CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
 
     CAmount nSubsidy = 50 * COIN;
     // Subsidy is cut in half every 210,000 blocks which will occur approximately every 4 years.
+
     nSubsidy >>= halvings;
-    return nSubsidy;
+    // Make halvings linear since start block defined in spork
+    if (nHeight >= sporkManager.GetSporkValue(SPORK_FXTC_03_BLOCK_REWARD_SMOOTH_HALVING_START)) {
+        nSubsidy -= ((nSubsidy >> 1) * (nHeight % consensusParams.nSubsidyHalvingInterval)) / consensusParams.nSubsidyHalvingInterval;
+    }
+    // Reward shaping
+    if (nHeight >= sporkManager.GetSporkValue(SPORK_FXTC_03_BLOCK_REWARD_SHAPING_START)) {
+        CAmount nStart = COIN / 100;
+        int nPart = 10;
+        while (nSubsidy > nStart) {
+            nSubsidy = ((nPart - 1) * nStart + nSubsidy) / nPart;
+            nPart *= 10;
+            nStart *= 10;
+        }
+    }
+    // Force minimum subsidy allowed
+    if (nSubsidy < consensusParams.nMinimumSubsidy) {
+        nSubsidy = consensusParams.nMinimumSubsidy;
+    }
+
+    // Hard fork to reduce the block reward by 10 extra percent (allowing budget/superblocks)
+    CAmount nSuperblockPart = (nHeight >= consensusParams.nBudgetPaymentsStartBlock) ? nSubsidy/10 : 0;
+
+    return fSuperblockPartOnly ? nSuperblockPart : nSubsidy - nSuperblockPart;
+}
+
+CAmount GetMasternodePayment(int nHeight, CAmount blockValue)
+{
+    CAmount ret = blockValue * 0.00;
+
+    ret = blockValue;
+
+    return ret;
 }
 
 bool IsInitialBlockDownload()
@@ -1698,6 +1763,16 @@ int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Para
     return nVersion;
 }
 
+bool GetBlockHash(uint256& hashRet, int nBlockHeight)
+{
+    LOCK(cs_main);
+    if(chainActive.Tip() == NULL) return false;
+    if(nBlockHeight < -1 || nBlockHeight > chainActive.Height()) return false;
+    if(nBlockHeight == -1) nBlockHeight = chainActive.Height();
+    hashRet = chainActive[nBlockHeight]->GetBlockHash();
+    return true;
+}
+
 /**
  * Threshold condition checker that triggers when unknown versionbits are seen on the network.
  */
@@ -2040,12 +2115,32 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint(BCLog::BENCH, "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs (%.2fms/blk)]\n", (unsigned)block.vtx.size(), MILLI * (nTime3 - nTime2), MILLI * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : MILLI * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * MICRO, nTimeConnect * MILLI / nBlocksTotal);
 
-    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
-    if (block.vtx[0]->GetValueOut() > blockReward)
+    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, pindex->GetBlockHeader(), chainparams.GetConsensus());
+    if (block.vtx[0]->GetValueOut() > blockReward * (!sporkManager.IsSporkActive(SPORK_FXTC_02_IGNORE_SLIGHTLY_HIGHER_COINBASE) ? 1 : 2))
         return state.DoS(100,
                          error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",
                                block.vtx[0]->GetValueOut(), blockReward),
                                REJECT_INVALID, "bad-cb-amount");
+
+    //MODIFIED TO CHECK MASTERNODE PAYMENTS AND SUPERBLOCKS
+
+    // It's possible that we simply don't have enough data and this could fail
+    // (i.e. block itself could be a correct one and we need to store it),
+    // that's why this is in ConnectBlock. Could be the other way around however -
+    // the peer who sent us this block is missing some data and wasn't able
+    // to recognize that block is actually invalid.
+    // TODO: resync data (both ways?) and try to reprocess this block later.
+    //CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, pindex->GetBlockHeader(), chainparams.GetConsensus());
+    std::string strError = "";
+    if (!sporkManager.IsSporkActive(SPORK_FXTC_02_IGNORE_MASTERNODE_REWARD_VALUE) && !IsBlockValueValid(block, pindex->nHeight, block.vtx[0]->GetValueOut(), strError)) {
+        return state.DoS(0, error("ConnectBlock(BTC): %s", strError), REJECT_INVALID, "bad-cb-amount");
+    }
+
+    if (!sporkManager.IsSporkActive(SPORK_FXTC_02_IGNORE_MASTERNODE_REWARD_PAYEE) && !IsBlockPayeeValid(block.vtx[0], pindex->nHeight, block.vtx[0]->GetValueOut(), pindex->GetBlockHeader())) {
+        mapRejectedBlocks.insert(make_pair(block.GetHash(), GetTime()));
+        return state.DoS(0, error("ConnectBlock(BTC): couldn't find masternode or superblock payments"),
+                                REJECT_INVALID, "bad-cb-payee");
+    }
 
     if (!control.Wait())
         return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
@@ -2457,6 +2552,55 @@ bool CChainState::ConnectTip(CValidationState& state, const CChainParams& chainp
     connectTrace.BlockConnected(pindexNew, std::move(pthisBlock));
     return true;
 }
+
+bool CChainState::DisconnectBlocks(int blocks)
+{
+    LOCK(cs_main);
+
+    CValidationState state;
+
+    LogPrintf("DisconnectBlocks -- Got command to replay %d blocks\n", blocks);
+    for(int i = 0; i < blocks; i++) {
+        if(!DisconnectTip(state, Params(), nullptr) || !state.IsValid()) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+void CChainState::ReprocessBlocks(int nBlocks)
+{
+    LOCK(cs_main);
+
+    std::map<uint256, int64_t>::iterator it = mapRejectedBlocks.begin();
+    while(it != mapRejectedBlocks.end()){
+        //use a window twice as large as is usual for the nBlocks we want to reset
+        if((*it).second  > GetTime() - (nBlocks*60*5)) {
+            BlockMap::iterator mi = mapBlockIndex.find((*it).first);
+            if (mi != mapBlockIndex.end() && (*mi).second) {
+
+                CBlockIndex* pindex = (*mi).second;
+                LogPrintf("ReprocessBlocks -- %s\n", (*it).first.ToString());
+
+                ResetBlockFailureFlags(pindex);
+            }
+        }
+        ++it;
+    }
+
+    DisconnectBlocks(nBlocks);
+
+    CValidationState state;
+    ActivateBestChain(state, Params(), std::shared_ptr<const CBlock>());
+}
+
+void ReprocessBlocks(int nBlocks)
+{
+    return g_chainstate.ReprocessBlocks(nBlocks);
+}
+
+//
 
 /**
  * Return the tip of the chain with the most work in it, that isn't
@@ -3390,6 +3534,8 @@ bool CChainState::AcceptBlockHeader(const CBlockHeader& block, CValidationState&
         pindexPrev = (*mi).second;
         if (pindexPrev->nStatus & BLOCK_FAILED_MASK)
             return state.DoS(100, error("%s: prev block invalid", __func__), REJECT_INVALID, "bad-prevblk");
+        if (fCheckpointsEnabled && pindexPrev->nHeight < chainparams.GetConsensus().nlastValidPowHashHeight &&  !Checkpoints::IsExpectedCheckpoint(chainparams.Checkpoints(), pindexPrev->nHeight + 1, block.GetHash()))
+            return state.DoS(100, error("%s: Checkpoints::IsExpectedCheckpoint(): invalid checkpoint at height %d", __func__, pindexPrev->nHeight + 1), REJECT_CHECKPOINT, "bad-chackpoint");
         if (!ContextualCheckBlockHeader(block, state, chainparams, pindexPrev, GetAdjustedTime()))
             return error("%s: Consensus::ContextualCheckBlockHeader: %s, %s", __func__, hash.ToString(), FormatStateMessage(state));
 

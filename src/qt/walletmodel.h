@@ -19,6 +19,10 @@
 #endif
 #include <qt/walletmodeltransaction.h>
 
+#ifdef ENABLE_WALLET
+#include <wallet/wallet.h>
+#endif // ENABLE_WALLET
+
 #include <interfaces/wallet.h>
 #include <support/allocators/secure.h>
 
@@ -65,6 +69,9 @@ public:
     // Todo: This is a hack, should be replaced with a cleaner solution!
     QString address;
     QString label;
+#ifdef ENABLE_WALLET
+    AvailableCoinsType inputType;
+#endif // ENABLE_WALLET
     CAmount amount;
     // If from a payment request, this is used for storing the memo
     QString message;

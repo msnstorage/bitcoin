@@ -83,7 +83,10 @@ public:
     const std::string& Bech32HRP() const { return bech32_hrp; }
     const std::vector<SeedSpec6>& FixedSeeds() const { return vFixedSeeds; }
     const CCheckpointData& Checkpoints() const { return checkpointData; }
+    int PoolMaxTransactions() const { return nPoolMaxTransactions; }
+    int FulfilledRequestExpireTime() const { return nFulfilledRequestExpireTime; }
     const ChainTxData& TxData() const { return chainTxData; }
+    std::string SporkPubKey() const { return strSporkPubKey; }
 protected:
     CChainParams() {}
 
@@ -103,8 +106,11 @@ protected:
     bool fRequireStandard;
     bool fMineBlocksOnDemand;
     CCheckpointData checkpointData;
+    int nPoolMaxTransactions;
+    int nFulfilledRequestExpireTime;
     ChainTxData chainTxData;
     bool m_fallback_fee_enabled;
+    std::string strSporkPubKey;
 };
 
 /**

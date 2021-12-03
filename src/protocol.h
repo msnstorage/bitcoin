@@ -238,6 +238,18 @@ extern const char *GETBLOCKTXN;
  * @since protocol version 70014 as described by BIP 152
  */
 extern const char *BLOCKTXN;
+extern const char *SPORK;
+extern const char *GETSPORKS;
+extern const char *MASTERNODEPAYMENTVOTE;
+extern const char *MASTERNODEPAYMENTSYNC;
+extern const char *MNANNOUNCE;
+extern const char *MNPING;
+extern const char *DSEG;
+extern const char *SYNCSTATUSCOUNT;
+extern const char *MNGOVERNANCESYNC;
+extern const char *MNGOVERNANCEOBJECT;
+extern const char *MNGOVERNANCEOBJECTVOTE;
+extern const char *MNVERIFY;
 };
 
 /* Get a vector of all valid message types (see above) */
@@ -376,6 +388,16 @@ enum GetDataMsg
     // The following can only occur in getdata. Invs always use TX or BLOCK.
     MSG_FILTERED_BLOCK = 3,  //!< Defined in BIP37
     MSG_CMPCT_BLOCK = 4,     //!< Defined in BIP152
+    MSG_SPORK,
+    MSG_MASTERNODE_PAYMENT_VOTE,
+    MSG_MASTERNODE_PAYMENT_BLOCK, // reusing, was MSG_MASTERNODE_SCANNING_ERROR previousely, was NOT used in 12.0
+    MSG_MASTERNODE_QUORUM, // not implemented
+    MSG_MASTERNODE_ANNOUNCE,
+    MSG_MASTERNODE_PING,
+    MSG_GOVERNANCE_OBJECT,
+    MSG_GOVERNANCE_OBJECT_VOTE,
+    MSG_MASTERNODE_VERIFY,
+    // Witness flagged messages
     MSG_WITNESS_BLOCK = MSG_BLOCK | MSG_WITNESS_FLAG, //!< Defined in BIP144
     MSG_WITNESS_TX = MSG_TX | MSG_WITNESS_FLAG,       //!< Defined in BIP144
     MSG_FILTERED_WITNESS_BLOCK = MSG_FILTERED_BLOCK | MSG_WITNESS_FLAG,

@@ -8,6 +8,7 @@
 #include <qt/clientmodel.h>
 #include <qt/guiconstants.h>
 #include <qt/guiutil.h>
+#include <qt/masternodelist.h>
 #include <qt/modaloverlay.h>
 #include <qt/networkstyle.h>
 #include <qt/notificator.h>
@@ -33,6 +34,7 @@
 #include <chainparams.h>
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
+#include <masternode-sync.h>
 #include <ui_interface.h>
 #include <util/system.h>
 
@@ -170,7 +172,7 @@ BitcoinGUI::BitcoinGUI(interfaces::Node& node, const PlatformStyle *_platformSty
     progressBarLabel->setVisible(false);
     progressBar = new GUIUtil::ProgressBar();
     progressBar->setAlignment(Qt::AlignCenter);
-    progressBar->setVisible(false);
+    progressBar->setVisible(true);
 
     // Override style sheet for progress bar for styles that have a segmented progress bar,
     // as they make the text unreadable (workaround for issue #1071)
@@ -274,6 +276,22 @@ void BitcoinGUI::createActions()
     tabGroup->addAction(historyAction);
 
 #ifdef ENABLE_WALLET
+    QSettings settings;
+    if (settings.value("fShowMasternodesTab").toBool()) {
+        masternodeAction = new QAction(platformStyle->SingleColorIcon(":/icons/masternodes"), tr("&Masternodes"), this);
+        masternodeAction->setStatusTip(tr("Browse masternodes"));
+        masternodeAction->setToolTip(masternodeAction->statusTip());
+        masternodeAction->setCheckable(true);
+#ifdef Q_OS_MAC
+        masternodeAction->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_5));
+#else
+        masternodeAction->setShortcut(QKeySequence(Qt::ALT + Qt::Key_5));
+#endif
+        tabGroup->addAction(masternodeAction);
+        connect(masternodeAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
+        connect(masternodeAction, &QAction::triggered, [this]{ gotoMasternodePage(); });
+    }
+
     // These showNormalIfMinimized are needed because Send Coins and Receive Coins
     // can be triggered from the tray menu, and need to show the GUI to be useful.
     connect(overviewAction, &QAction::triggered, [this]{ showNormalIfMinimized(); });
@@ -320,6 +338,9 @@ void BitcoinGUI::createActions()
     verifyMessageAction = new QAction(platformStyle->TextColorIcon(":/icons/verify"), tr("&Verify message..."), this);
     verifyMessageAction->setStatusTip(tr("Verify messages to ensure they were signed with specified Bitcoin addresses"));
 
+    openMNConfEditorAction = new QAction(platformStyle->TextColorIcon(":/icons/edit"), tr("Open &Masternode Configuration File"), this);
+    openMNConfEditorAction->setStatusTip(tr("Open Masternode configuration file"));
+
     openRPCConsoleAction = new QAction(platformStyle->TextColorIcon(":/icons/debugwindow"), tr("&Debug window"), this);
     openRPCConsoleAction->setStatusTip(tr("Open debugging and diagnostic console"));
     // initially disable the debug window menu item
@@ -346,6 +367,7 @@ void BitcoinGUI::createActions()
     showHelpMessageAction->setMenuRole(QAction::NoRole);
     showHelpMessageAction->setStatusTip(tr("Show the %1 help message to get a list with possible Bitcoin command-line options").arg(tr(PACKAGE_NAME)));
 
+    connect(openMNConfEditorAction, &QAction::triggered, this, &BitcoinGUI::showMNConfEditor);
     connect(quitAction, &QAction::triggered, qApp, QApplication::quit);
     connect(aboutAction, &QAction::triggered, this, &BitcoinGUI::aboutClicked);
     connect(aboutQtAction, &QAction::triggered, qApp, QApplication::aboutQt);
@@ -450,6 +472,12 @@ void BitcoinGUI::createMenuBar()
     }
     file->addAction(quitAction);
 
+    if(walletFrame)
+    {
+        QMenu *tools = appMenuBar->addMenu(tr("&Tools"));
+        tools->addAction(openMNConfEditorAction);
+    }
+
     QMenu *settings = appMenuBar->addMenu(tr("&Settings"));
     if(walletFrame)
     {
@@ -536,6 +564,12 @@ void BitcoinGUI::createToolBars()
         toolbar->addAction(sendCoinsAction);
         toolbar->addAction(receiveCoinsAction);
         toolbar->addAction(historyAction);
+
+        QSettings settings;
+        if (settings.value("fShowMasternodesTab").toBool())
+        {
+            toolbar->addAction(masternodeAction);
+        }
         overviewAction->setChecked(true);
 
 #ifdef ENABLE_WALLET
@@ -577,6 +611,8 @@ void BitcoinGUI::setClientModel(ClientModel *_clientModel)
         modalOverlay->setKnownBestHeight(_clientModel->getHeaderTipHeight(), QDateTime::fromTime_t(_clientModel->getHeaderTipTime()));
         setNumBlocks(m_node.getNumBlocks(), QDateTime::fromTime_t(m_node.getLastBlockTime()), m_node.getVerificationProgress(), false);
         connect(_clientModel, &ClientModel::numBlocksChanged, this, &BitcoinGUI::setNumBlocks);
+
+        connect(clientModel, &ClientModel::additionalDataSyncProgressChanged, this, &BitcoinGUI::setAdditionalDataSyncProgress);
 
         // Receive and report messages from client model
         connect(_clientModel, &ClientModel::message, [this](const QString &title, const QString &message, unsigned int style){
@@ -711,6 +747,12 @@ void BitcoinGUI::setWalletActionsEnabled(bool enabled)
     receiveCoinsAction->setEnabled(enabled);
     receiveCoinsMenuAction->setEnabled(enabled);
     historyAction->setEnabled(enabled);
+
+    QSettings settings;
+    if (settings.value("fShowMasternodesTab").toBool() && masternodeAction) {
+        masternodeAction->setEnabled(enabled);
+    }
+
     encryptWalletAction->setEnabled(enabled);
     backupWalletAction->setEnabled(enabled);
     changePassphraseAction->setEnabled(enabled);
@@ -767,6 +809,9 @@ void BitcoinGUI::createTrayIconMenu()
         trayIconMenu->addAction(openRPCConsoleAction);
     }
     trayIconMenu->addAction(optionsAction);
+    trayIconMenu->addAction(openRPCConsoleAction);
+    trayIconMenu->addAction(openMNConfEditorAction);
+
 #ifndef Q_OS_MAC // This is built-in on macOS
     trayIconMenu->addSeparator();
     trayIconMenu->addAction(quitAction);
@@ -816,6 +861,11 @@ void BitcoinGUI::showDebugWindowActivateConsole()
     showDebugWindow();
 }
 
+void BitcoinGUI::showMNConfEditor()
+{
+    GUIUtil::openMNConfigfile();
+}
+
 void BitcoinGUI::showHelpMessageClicked()
 {
     helpMessageDialog->show();
@@ -841,6 +891,15 @@ void BitcoinGUI::gotoHistoryPage()
 {
     historyAction->setChecked(true);
     if (walletFrame) walletFrame->gotoHistoryPage();
+}
+
+void BitcoinGUI::gotoMasternodePage()
+{
+    QSettings settings;
+    if (settings.value("fShowMasternodesTab").toBool()) {
+        masternodeAction->setChecked(true);
+        if (walletFrame) walletFrame->gotoMasternodePage();
+    }
 }
 
 void BitcoinGUI::gotoReceiveCoinsPage()
@@ -991,13 +1050,12 @@ void BitcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVer
         {
             walletFrame->showOutOfSyncWarning(false);
             modalOverlay->showHide(true, true);
+            if(secs < 25*60)
+                modalOverlay->hideForever();
         }
 #endif // ENABLE_WALLET
-
-        progressBarLabel->setVisible(false);
-        progressBar->setVisible(false);
     }
-    else
+    if(!masternodeSync.IsBlockchainSynced())
     {
         QString timeBehindText = GUIUtil::formatNiceTimeOffset(secs);
 
@@ -1030,6 +1088,56 @@ void BitcoinGUI::setNumBlocks(int count, const QDateTime& blockDate, double nVer
         tooltip += QString("<br>");
         tooltip += tr("Transactions after this will not yet be visible.");
     }
+
+    // Don't word-wrap this (fixed-width) tooltip
+    tooltip = QString("<nobr>") + tooltip + QString("</nobr>");
+
+    labelBlocksIcon->setToolTip(tooltip);
+    progressBarLabel->setToolTip(tooltip);
+    progressBar->setToolTip(tooltip);
+}
+
+void BitcoinGUI::setAdditionalDataSyncProgress(double nSyncProgress)
+{
+    if(!clientModel)
+        return;
+
+    // No additional data sync should be happening while blockchain is not synced, nothing to update
+    if(!masternodeSync.IsBlockchainSynced())
+        return;
+
+    // Prevent orphan statusbar messages (e.g. hover Quit in main menu, wait until chain-sync starts -> garbelled text)
+    statusBar()->clearMessage();
+
+    QString tooltip;
+
+    QString strSyncStatus;
+    tooltip = tr("Up to date") + QString(".<br>") + tooltip;
+
+    if(masternodeSync.IsSynced()) {
+        progressBarLabel->setVisible(false);
+        progressBar->setVisible(false);
+        labelBlocksIcon->setPixmap(platformStyle->SingleColorIcon(":/icons/synced").pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
+    } else {
+
+        labelBlocksIcon->setPixmap(platformStyle->SingleColorIcon(QString(
+            ":/movies/spinner-%1").arg(spinnerFrame, 3, 10, QChar('0')))
+            .pixmap(STATUSBAR_ICONSIZE, STATUSBAR_ICONSIZE));
+        spinnerFrame = (spinnerFrame + 1) % SPINNER_FRAMES;
+
+#ifdef ENABLE_WALLET
+        if(walletFrame)
+            walletFrame->showOutOfSyncWarning(false);
+#endif // ENABLE_WALLET
+
+        progressBar->setFormat(tr("Synchronizing additional data: %p%"));
+        progressBar->setMaximum(1000000000);
+        progressBar->setValue(nSyncProgress * 1000000000.0 + 0.5);
+    }
+
+    strSyncStatus = QString(masternodeSync.GetSyncStatus().c_str());
+    progressBarLabel->setText(strSyncStatus);
+    tooltip = strSyncStatus + QString("<br>") + tooltip;
 
     // Don't word-wrap this (fixed-width) tooltip
     tooltip = QString("<nobr>") + tooltip + QString("</nobr>");

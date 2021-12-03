@@ -7,6 +7,7 @@
 
 #include <checkpoints.h>
 #include <chain.h>
+#include <governance.h>
 #include <wallet/coincontrol.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
@@ -16,6 +17,7 @@
 #include <key_io.h>
 #include <keystore.h>
 #include <validation.h>
+#include <masternode.h>
 #include <net.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
@@ -24,6 +26,7 @@
 #include <primitives/transaction.h>
 #include <script/descriptor.h>
 #include <script/script.h>
+#include <spork.h>
 #include <shutdown.h>
 #include <timedata.h>
 #include <txmempool.h>
@@ -2310,7 +2313,12 @@ CAmount CWallet::GetAvailableBalance(const CCoinControl* coinControl) const
     return balance;
 }
 
-void CWallet::AvailableCoins(interfaces::Chain::Lock& locked_chain, std::vector<COutput> &vCoins, bool fOnlySafe, const CCoinControl *coinControl, const CAmount &nMinimumAmount, const CAmount &nMaximumAmount, const CAmount &nMinimumSumAmount, const uint64_t nMaximumCount, const int nMinDepth, const int nMaxDepth) const
+void CWallet::AvailableCoins(interfaces::Chain::Lock& locked_chain, std::vector<COutput> &vCoins, bool fOnlySafe, const CCoinControl *coinControl, bool fIncludeZeroValue, AvailableCoinsType nCoinType, const CAmount &nMinimumAmount, const CAmount &nMaximumAmount, const CAmount &nMinimumSumAmount, const uint64_t nMaximumCount, const int nMinDepth, const int nMaxDepth) const
+{
+    return AvailableCoins(locked_chain, vCoins, fOnlySafe, coinControl, nMinimumAmount, nMaximumAmount, nMinimumSumAmount, nMaximumCount, nMinDepth, nMaxDepth, fIncludeZeroValue, nCoinType);
+}
+
+void CWallet::AvailableCoins(interfaces::Chain::Lock& locked_chain, std::vector<COutput> &vCoins, bool fOnlySafe, const CCoinControl *coinControl, const CAmount &nMinimumAmount, const CAmount &nMaximumAmount, const CAmount &nMinimumSumAmount, const uint64_t nMaximumCount, const int nMinDepth, const int nMaxDepth, bool fIncludeZeroValue, AvailableCoinsType nCoinType) const
 {
     AssertLockHeld(cs_main);
     AssertLockHeld(cs_wallet);
@@ -2385,11 +2393,19 @@ void CWallet::AvailableCoins(interfaces::Chain::Lock& locked_chain, std::vector<
             if (coinControl && coinControl->HasSelected() && !coinControl->fAllowOtherInputs && !coinControl->IsSelected(COutPoint(entry.first, i)))
                 continue;
 
-            if (IsLockedCoin(entry.first, i))
+            if (IsLockedCoin(entry.first, i) && nCoinType != ONLY_MASTERNODE_COLLATERAL)
                 continue;
 
             if (IsSpent(locked_chain, wtxid, i))
                 continue;
+
+            bool found = false;
+            if(nCoinType == ONLY_MASTERNODE_COLLATERAL) {
+                found = CMasternode::CheckCollateral(COutPoint(pcoin->GetHash(),i)) == CMasternode::COLLATERAL_OK;
+            } else {
+                found = true;
+            }
+            if(!found) continue;
 
             isminetype mine = IsMine(pcoin->tx->vout[i]);
 
@@ -2528,7 +2544,7 @@ bool CWallet::SelectCoinsMinConf(const CAmount& nTargetValue, const CoinEligibil
     }
 }
 
-bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet, const CCoinControl& coin_control, CoinSelectionParams& coin_selection_params, bool& bnb_used) const
+bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAmount& nTargetValue, std::set<CInputCoin>& setCoinsRet, CAmount& nValueRet, const CCoinControl& coin_control, CoinSelectionParams& coin_selection_params, bool& bnb_used, AvailableCoinsType nCoinType) const
 {
     std::vector<COutput> vCoins(vAvailableCoins);
 
@@ -2613,6 +2629,93 @@ bool CWallet::SelectCoins(const std::vector<COutput>& vAvailableCoins, const CAm
     nValueRet += nValueFromPresetInputs;
 
     return res;
+}
+
+bool CWallet::GetMasternodeOutpointAndKeys(COutPoint& outpointRet, CPubKey& pubKeyRet, CKey& keyRet, std::string strTxHash, std::string strOutputIndex)
+{
+
+    auto locked_chain = chain().lock();
+    LOCK2(cs_main, cs_wallet);
+
+    // wait for reindex and/or import to finish
+    if (fImporting || fReindex) return false;
+
+    // Find possible candidates
+    std::vector<COutput> vPossibleCoins;
+    AvailableCoins(*locked_chain, vPossibleCoins, true, NULL, false, ONLY_MASTERNODE_COLLATERAL);
+    if(vPossibleCoins.empty()) {
+        LogPrintf("CWallet::GetMasternodeOutpointAndKeys -- Could not locate any valid masternode vin\n");
+        return false;
+    }
+
+    if(strTxHash.empty()) // No output specified, select the first one
+        return GetOutpointAndKeysFromOutput(vPossibleCoins[0], outpointRet, pubKeyRet, keyRet);
+
+    // Find specific vin
+    uint256 txHash = uint256S(strTxHash);
+    int nOutputIndex = atoi(strOutputIndex.c_str());
+
+    for (auto& out : vPossibleCoins)
+        if(out.tx->GetHash() == txHash && out.i == nOutputIndex) // found it!
+            return GetOutpointAndKeysFromOutput(out, outpointRet, pubKeyRet, keyRet);
+
+    LogPrintf("CWallet::GetMasternodeOutpointAndKeys -- Could not locate specified masternode vin\n");
+    return false;
+}
+
+bool CWallet::GetOutpointAndKeysFromOutput(const COutput& out, COutPoint& outpointRet, CPubKey& pubKeyRet, CKey& keyRet)
+{
+    // wait for reindex and/or import to finish
+    if (fImporting || fReindex) return false;
+
+    CScript pubScript;
+
+    outpointRet = COutPoint(out.tx->GetHash(), out.i);
+    pubScript = out.tx->tx->vout[out.i].scriptPubKey; // the inputs PubKey
+
+    CTxDestination address1;
+    ExtractDestination(pubScript, address1);
+
+    CKeyID keyID = GetKeyForDestination(*this, address1);
+    if (keyID.IsNull()) {
+        LogPrintf("CWallet::GetOutpointAndKeysFromOutput -- Address does not refer to a key\n");
+        return false;
+    }
+
+    if (!GetKey(keyID, keyRet)) {
+        LogPrintf ("CWallet::GetOutpointAndKeysFromOutput -- Private key for address is not known\n");
+        return false;
+    }
+
+    pubKeyRet = keyRet.GetPubKey();
+    return true;
+}
+
+bool CWallet::GetBudgetSystemCollateralTX(CTransactionRef& tx, uint256 hash, CAmount amount, bool fUseInstantSend)
+{
+    auto locked_chain = chain().lock();
+    LOCK(cs_wallet);
+
+    // make our change address
+    CReserveKey reservekey(this);
+
+    CScript scriptChange;
+    scriptChange << OP_RETURN << ToByteVector(hash);
+
+    CAmount nFeeRet = 0;
+    int nChangePosRet = -1;
+    std::string strFail = "";
+    vector< CRecipient > vecSend;
+    vecSend.push_back((CRecipient){scriptChange, amount, false});
+
+    CCoinControl *coinControl=NULL;
+    bool success = CreateTransaction(*locked_chain, vecSend, tx, reservekey, nFeeRet, nChangePosRet, strFail, *coinControl, true, ALL_COINS);
+    if(!success){
+        LogPrintf("CWallet::GetBudgetSystemCollateralTX -- Error: %s\n", strFail);
+        return false;
+    }
+
+    return true;
 }
 
 bool CWallet::SignTransaction(CMutableTransaction &tx)
@@ -2782,7 +2885,7 @@ OutputType CWallet::TransactionChangeType(OutputType change_type, const std::vec
 }
 
 bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std::vector<CRecipient>& vecSend, CTransactionRef& tx, CReserveKey& reservekey, CAmount& nFeeRet,
-                         int& nChangePosInOut, std::string& strFailReason, const CCoinControl& coin_control, bool sign)
+                          int& nChangePosInOut, std::string& strFailReason, const CCoinControl& coin_control, bool sign, AvailableCoinsType nCoinType)
 {
     CAmount nValue = 0;
     int nChangePosRequest = nChangePosInOut;
@@ -2933,7 +3036,7 @@ bool CWallet::CreateTransaction(interfaces::Chain::Lock& locked_chain, const std
                         coin_selection_params.change_spend_size = (size_t)change_spend_size;
                     }
                     coin_selection_params.effective_fee = nFeeRateNeeded;
-                    if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coin_control, coin_selection_params, bnb_used))
+                    if (!SelectCoins(vAvailableCoins, nValueToSelect, setCoins, nValueIn, coin_control, coin_selection_params, bnb_used, nCoinType))
                     {
                         // If BnB was used, it was the first pass. No longer the first pass and continue loop with knapsack.
                         if (bnb_used) {

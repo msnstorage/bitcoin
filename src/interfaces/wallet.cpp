@@ -244,13 +244,14 @@ public:
         bool sign,
         int& change_pos,
         CAmount& fee,
-        std::string& fail_reason) override
+        std::string& fail_reason,
+        AvailableCoinsType nCoinType) override
     {
         auto locked_chain = m_wallet->chain().lock();
         LOCK(m_wallet->cs_wallet);
         auto pending = MakeUnique<PendingWalletTxImpl>(*m_wallet);
         if (!m_wallet->CreateTransaction(*locked_chain, recipients, pending->m_tx, pending->m_key, fee, change_pos,
-                fail_reason, coin_control, sign)) {
+                fail_reason, coin_control, sign, nCoinType)) {
             return {};
         }
         return std::move(pending);
@@ -502,6 +503,10 @@ public:
     std::unique_ptr<Handler> handleCanGetAddressesChanged(CanGetAddressesChangedFn fn) override
     {
         return MakeHandler(m_wallet->NotifyCanGetAddressesChanged.connect(fn));
+    }
+    std::unique_ptr<Handler> handleNotifyAdditionalDataSyncProgressChanged(NotifyAdditionalDataSyncProgressChangedFn fn) override
+    {
+        return MakeHandler(m_wallet->NotifyAdditionalDataSyncProgressChanged.connect(fn));
     }
 
     std::shared_ptr<CWallet> m_wallet;
