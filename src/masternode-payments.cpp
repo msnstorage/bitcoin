@@ -11,7 +11,6 @@
 #include <messagesigner.h>
 #include <netfulfilledman.h>
 #include <netmessagemaker.h>
-#include <shutdown.h>
 #include <spork.h>
 #include <util/system.h>
 
@@ -1037,44 +1036,4 @@ void CMasternodePayments::UpdatedBlockTip(const CBlockIndex *pindex, CConnman& c
 
     CheckPreviousBlockVotes(nFutureBlock - 1);
     ProcessBlock(nFutureBlock, connman);
-}
-
-void ThreadMasternodeMiner(CConnman& connman)
-{
-
-    static bool fOneThread;
-    if(fOneThread) return;
-    fOneThread = true;
-
-    // Make this thread recognisable as the Masternode thread
-    RenameThread("masternode-miner");
-
-    unsigned int nTick = 0;
-
-    while (true)
-    {
-        MilliSleep(1000);
-
-        if(masternodeSync.IsBlockchainSynced() && masternodeSync.IsSynced() && !ShutdownRequested()) {
-
-            nTick++;
-
-            // check if we should activate or ping every few minutes,
-            // slightly postpone first run to give net thread a chance to connect to some peers
-            if(nTick % 4 == 4)
-            {
-                int nHeight = chainActive.Height();
-                CScript pubkeyScript;
-                pubkeyScript = GetScriptForDestination(activeMasternode.pubKeyMasternode.GetID());
-
-                if (mnpayments.mapMasternodeBlocks[nHeight].GetBestPayee(pubkeyScript))
-                {
-                    LogPrintf("CMasternodePayments::Miner MY REWARD BLOCK: %d WINNER:%s\n", nHeight, EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
-                } else
-                {
-                    LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
-                }
-            }
-        }
-    }
 }

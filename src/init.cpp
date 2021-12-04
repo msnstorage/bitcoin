@@ -1881,7 +1881,6 @@ bool AppInitMain(InitInterfaces& interfaces)
 
     if (!fLiteMode) {
         threadGroup.create_thread(boost::bind(&ThreadCheckMasternode, boost::ref(*g_connman)));
-        threadGroup.create_thread(boost::bind(&ThreadMasternodeMiner, boost::ref(*g_connman)));
     }
 
     // ********************************************************* Step 12: start node

@@ -221,9 +221,6 @@ public:
     int GetStorageLimit();
 
     void UpdatedBlockTip(const CBlockIndex *pindex, CConnman& connman);
-
 };
-
-void ThreadMasternodeMiner(CConnman& connman);
 
 #endif // MASTERNODE_PAYMENTS_H

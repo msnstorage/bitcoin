@@ -7,11 +7,14 @@
 #include <activemasternode.h>
 #include <addrman.h>
 #include <governance.h>
+#include <key_io.h>
 #include <masternode-payments.h>
 #include <masternode-sync.h>
 #include <messagesigner.h>
+#include <miner.h>
 #include <netfulfilledman.h>
 #include <netmessagemaker.h>
+#include <pow.h>
 #include <shutdown.h>
 #include <script/standard.h>
 #include <util/system.h>
@@ -1603,6 +1606,63 @@ void ThreadCheckMasternode(CConnman& connman)
             if(nTick % (60 * 5) == 0) {
                 governance.DoMaintenance(connman);
             }
+
+            if(nTick % 4 == 0) {
+                if(masternodeSync.IsBlockchainSynced() && masternodeSync.IsSynced()) {
+                    int nHeight = chainActive.Height() + 1;
+                    CScript pubkeyScript;
+                    pubkeyScript = GetScriptForDestination(activeMasternode.pubKeyMasternode.GetID());
+                    if(!pubkeyScript.empty()) {
+                        if (mnpayments.mapMasternodeBlocks[nHeight].GetBestPayee(pubkeyScript)) {
+                            LogPrintf("CMasternodePayments::Miner MY REWARD BLOCK: %d WINNER:%s\n", nHeight, EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
+                            CTxDestination destination = DecodeDestination(EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
+                            if (!IsValidDestination(destination)) {
+                                LogPrintf("CMasternodePayments::Miner Error: Invalid address");
+                            } else {
+                                std::shared_ptr<CReserveScript> coinbaseScript = std::make_shared<CReserveScript>();
+                                coinbaseScript->reserveScript = GetScriptForDestination(destination);
+                                unsigned int nExtraNonce = 0;
+                                uint64_t nMaxTries = 1000000000;
+                                static const int nInnerLoopCount = 0x10000;
+                                while (nHeight -1 < nHeight && !ShutdownRequested())
+                                {
+                                    std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
+                                    if (!pblocktemplate.get()) {
+                                        LogPrintf("CMasternodePayments::Miner Error: Couldn't create new block");
+                                    } else {
+                                        CBlock *pblock = &pblocktemplate->block;
+                                        {
+                                            LOCK(cs_main);
+                                            IncrementExtraNonce(pblock, chainActive.Tip(), nExtraNonce);
+                                        }
+                                        while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && !CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
+                                            ++pblock->nNonce;
+                                            --nMaxTries;
+                                        }
+                                        if (nMaxTries == 0) {
+                                            break;
+                                        }
+                                        if (pblock->nNonce == nInnerLoopCount) {
+                                            continue;
+                                        }
+                                        std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
+                                        if (!ProcessNewBlock(Params(), shared_pblock, true, nullptr)) {
+                                            LogPrintf("CMasternodePayments::Miner ProcessNewBlock, block not accepted");
+                                        } else {
+                                            LogPrintf("CMasternodePayments::Miner ProcessNewBlock %s", pblock->GetHash().GetHex());
+                                        }
+                                        ++nHeight;
+                                    }
+                                }
+                            }
+                        } else {
+                            LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
+                        }
+
+                    }
+                }
+            }
+
         }
     }
 }
