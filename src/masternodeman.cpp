@@ -8,6 +8,7 @@
 #include <addrman.h>
 #include <governance.h>
 #include <key_io.h>
+#include <masternode.h>
 #include <masternode-payments.h>
 #include <masternode-sync.h>
 #include <messagesigner.h>
@@ -1611,20 +1612,26 @@ void ThreadCheckMasternode(CConnman& connman)
                 if(masternodeSync.IsBlockchainSynced() && masternodeSync.IsSynced()) {
                     int nHeight = chainActive.Height() + 1;
                     CScript pubkeyScript;
-                    pubkeyScript = GetScriptForDestination(activeMasternode.pubKeyMasternode.GetID());
+                    CMasternode mn;
+                    std::string address2;
+                    if(mnodeman.Get(activeMasternode.outpoint, mn)) {
+                        pubkeyScript = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
+                        CTxDestination address1;
+                        ExtractDestination(pubkeyScript, address1);
+                        address2 = EncodeDestination(address1);
+                    }
+
                     if(!pubkeyScript.empty()) {
                         if (mnpayments.mapMasternodeBlocks[nHeight].GetBestPayee(pubkeyScript)) {
-                            LogPrintf("CMasternodePayments::Miner MY REWARD BLOCK: %d WINNER:%s\n", nHeight, EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
-                            CTxDestination destination = DecodeDestination(EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
-                            if (!IsValidDestination(destination)) {
-                                LogPrintf("CMasternodePayments::Miner Error: Invalid address");
-                            } else {
+                            LogPrintf("CMasternodePayments::Miner MY REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
+                             {
                                 std::shared_ptr<CReserveScript> coinbaseScript = std::make_shared<CReserveScript>();
-                                coinbaseScript->reserveScript = GetScriptForDestination(destination);
+                                coinbaseScript->reserveScript = pubkeyScript;
                                 unsigned int nExtraNonce = 0;
                                 uint64_t nMaxTries = 1000000000;
                                 static const int nInnerLoopCount = 0x10000;
-                                while (nHeight -1 < nHeight && !ShutdownRequested())
+                                bool finish = false;
+                                while (!finish && !ShutdownRequested())
                                 {
                                     std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
                                     if (!pblocktemplate.get()) {
@@ -1651,12 +1658,12 @@ void ThreadCheckMasternode(CConnman& connman)
                                         } else {
                                             LogPrintf("CMasternodePayments::Miner ProcessNewBlock %s", pblock->GetHash().GetHex());
                                         }
-                                        ++nHeight;
+                                        finish = true;
                                     }
                                 }
                             }
                         } else {
-                            LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, EncodeDestination(activeMasternode.pubKeyMasternode.GetID()));
+                            LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
                         }
 
                     }
