@@ -467,7 +467,7 @@ bool CMasternodePayments::IsScheduled(CMasternode& mn, int nNotBlockHeight)
     mnpayee = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
 
     CScript payee;
-    for (int64_t h = nCachedBlockHeight; h <= nCachedBlockHeight + 4; h++){
+    for (int64_t h = nCachedBlockHeight; h <= nCachedBlockHeight + 1; h++){
         if(h == nNotBlockHeight) continue;
         if(mapMasternodeBlocks.count(h) && mapMasternodeBlocks[h].GetBestPayee(payee) && mnpayee == payee) {
             return true;
@@ -1032,7 +1032,7 @@ void CMasternodePayments::UpdatedBlockTip(const CBlockIndex *pindex, CConnman& c
     nCachedBlockHeight = pindex->nHeight;
     LogPrint(BCLog::MNPAYMENTS, "CMasternodePayments::UpdatedBlockTip -- nCachedBlockHeight=%d\n", nCachedBlockHeight);
 
-    int nFutureBlock = nCachedBlockHeight + 5;
+    int nFutureBlock = nCachedBlockHeight + 1;
 
     CheckPreviousBlockVotes(nFutureBlock - 1);
     ProcessBlock(nFutureBlock, connman);
