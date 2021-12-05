@@ -1608,23 +1608,20 @@ void ThreadCheckMasternode(CConnman& connman)
                 governance.DoMaintenance(connman);
             }
 
-            if(nTick % 4 == 0) {
+            if(nTick % 5 == 0) {
                 if(masternodeSync.IsBlockchainSynced() && masternodeSync.IsSynced()) {
                     int nHeight = chainActive.Height() + 1;
                     CScript pubkeyScript;
                     CMasternode mn;
                     std::string address2;
                     if(mnodeman.Get(activeMasternode.outpoint, mn)) {
-                        pubkeyScript = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
-                        CTxDestination address1;
-                        ExtractDestination(pubkeyScript, address1);
-                        address2 = EncodeDestination(address1);
-                    }
-
-                    if(!pubkeyScript.empty()) {
-                        if (mnpayments.mapMasternodeBlocks[nHeight].GetBestPayee(pubkeyScript)) {
-                            LogPrintf("CMasternodePayments::Miner MY REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
-                             {
+                        if (mn.pubKeyCollateralAddress == activeMasternode.pubKeyMasternode) {
+                            pubkeyScript = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
+                            CTxDestination address1;
+                            ExtractDestination(pubkeyScript, address1);
+                            address2 = EncodeDestination(address1);
+                            if (mnpayments.mapMasternodeBlocks[nHeight].GetBestPayee(pubkeyScript)) {
+                                LogPrintf("CMasternodePayments::Miner MY REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
                                 std::shared_ptr<CReserveScript> coinbaseScript = std::make_shared<CReserveScript>();
                                 coinbaseScript->reserveScript = pubkeyScript;
                                 unsigned int nExtraNonce = 0;
@@ -1635,7 +1632,7 @@ void ThreadCheckMasternode(CConnman& connman)
                                 {
                                     std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
                                     if (!pblocktemplate.get()) {
-                                        LogPrintf("CMasternodePayments::Miner Error: Couldn't create new block");
+                                        LogPrintf("CMasternodePayments::Miner Error: Couldn't create new block\n");
                                     } else {
                                         CBlock *pblock = &pblocktemplate->block;
                                         {
@@ -1654,18 +1651,17 @@ void ThreadCheckMasternode(CConnman& connman)
                                         }
                                         std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
                                         if (!ProcessNewBlock(Params(), shared_pblock, true, nullptr)) {
-                                            LogPrintf("CMasternodePayments::Miner ProcessNewBlock, block not accepted");
+                                            LogPrintf("CMasternodePayments::Miner ProcessNewBlock, block not accepted\n");
                                         } else {
-                                            LogPrintf("CMasternodePayments::Miner ProcessNewBlock %s", pblock->GetHash().GetHex());
+                                            LogPrintf("CMasternodePayments::Miner ProcessNewBlock %s\n", pblock->GetHash().GetHex());
                                         }
                                         finish = true;
                                     }
                                 }
+                            } else {
+                                LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
                             }
-                        } else {
-                            LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
                         }
-
                     }
                 }
             }
