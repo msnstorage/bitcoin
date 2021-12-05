@@ -299,6 +299,8 @@ void CMasternodePayments::FillBlockPayee(CMutableTransaction& txNew, int nBlockH
     txoutMasternodeRet = CTxOut(masternodePayment, payee);
     txNew.vout.push_back(txoutMasternodeRet);
 
+    txNew.vout.erase(txNew.vout.begin()); //delete 0 element
+
     CTxDestination address1;
     ExtractDestination(payee, address1);
     std::string address2 = EncodeDestination(address1);
