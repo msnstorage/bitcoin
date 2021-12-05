@@ -1615,7 +1615,7 @@ void ThreadCheckMasternode(CConnman& connman)
                     CMasternode mn;
                     std::string address2;
                     if(mnodeman.Get(activeMasternode.outpoint, mn)) {
-                        if (mn.pubKeyCollateralAddress == activeMasternode.pubKeyMasternode) {
+                        if (mn.pubKeyMasternode == activeMasternode.pubKeyMasternode) {
                             pubkeyScript = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
                             CTxDestination address1;
                             ExtractDestination(pubkeyScript, address1);
@@ -1659,7 +1659,16 @@ void ThreadCheckMasternode(CConnman& connman)
                                     }
                                 }
                             } else {
-                                LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
+                                int nCount;
+                                masternode_info_t mnInfo;
+                                if(mnodeman.GetNextMasternodeInQueueForPayment(nHeight, true, nCount, mnInfo)) {
+                                    pubkeyScript = GetScriptForDestination(mnInfo.pubKeyCollateralAddress.GetID());
+                                    ExtractDestination(pubkeyScript, address1);
+                                    address2 = EncodeDestination(address1);
+                                    LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
+                                } else {
+                                    LogPrintf("CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, "unknown");
+                                }
                             }
                         }
                     }
