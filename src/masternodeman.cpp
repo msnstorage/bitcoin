@@ -1576,8 +1576,8 @@ void ThreadCheckMasternode(CConnman& connman)
 
     unsigned int nTick = 0;
 
-    bool miner_finish = false;
     bool miner_running = false;
+    bool miner_finish = true;
 
     while (true)
     {
@@ -1639,6 +1639,7 @@ void ThreadCheckMasternode(CConnman& connman)
                             uint64_t nMaxTries = 1000000000;
                             static const int nInnerLoopCount = 0x10000;
                             if (!miner_running) {
+                                miner_finish = false;
                                 while (!miner_finish && !ShutdownRequested()) {
                                     miner_running = true;
                                     std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
