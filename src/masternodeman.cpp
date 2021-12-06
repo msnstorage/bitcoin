@@ -1613,69 +1613,73 @@ void ThreadCheckMasternode(CConnman& connman)
 
             if(nTick % 5 == 0) {
                 if(masternodeSync.IsBlockchainSynced() && masternodeSync.IsSynced()) {
-                    int nHeight = chainActive.Height() + 1;
-                    CScript pubkeyScript;
-                    CMasternode mn;
-                    std::string address2;
-                    if(mnodeman.Get(activeMasternode.outpoint, mn)) {
-                        if (mn.pubKeyMasternode == activeMasternode.pubKeyMasternode) {
-                            pubkeyScript = GetScriptForDestination(mn.pubKeyCollateralAddress.GetID());
+                    int nCount;
+                    int nHeight;
+                    masternode_info_t mnInfo;
+                    CBlockIndex* pindex = NULL;
+                    {
+                        LOCK(cs_main);
+                        pindex = chainActive.Tip();
+                    }
+
+                    nHeight = pindex->nHeight + 1;
+                    mnodeman.UpdateLastPaid(pindex);
+                    if(mnodeman.GetNextMasternodeInQueueForPayment(nHeight, true, nCount, mnInfo)) {
+                        CScript pubkeyScript;
+                        pubkeyScript = GetScriptForDestination(mnInfo.pubKeyCollateralAddress.GetID());
+                        if (activeMasternode.pubKeyMasternode == mnInfo.pubKeyMasternode) {
                             CTxDestination address1;
+                            std::string address2;
                             ExtractDestination(pubkeyScript, address1);
                             address2 = EncodeDestination(address1);
-                            if (mnpayments.mapMasternodeBlocks[nHeight].GetBestPayee(pubkeyScript)) {
-                                LogPrint(BCLog::MINER, "CMasternodePayments::Miner MY REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
-                                std::shared_ptr<CReserveScript> coinbaseScript = std::make_shared<CReserveScript>();
-                                coinbaseScript->reserveScript = pubkeyScript;
-                                unsigned int nExtraNonce = 0;
-                                uint64_t nMaxTries = 1000000000;
-                                static const int nInnerLoopCount = 0x10000;
-                                if (!miner_running) {
-                                    while (!miner_finish && !ShutdownRequested()) {
-                                        miner_running = true;
-                                        std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
-                                        if (!pblocktemplate.get()) {
-                                            LogPrint(BCLog::MINER, "CMasternodePayments::Miner Error: Couldn't create new block\n");
-                                        } else {
-                                            CBlock *pblock = &pblocktemplate->block;
-                                            {
-                                                LOCK(cs_main);
-                                                IncrementExtraNonce(pblock, chainActive.Tip(), nExtraNonce);
-                                            }
-                                            while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && !CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
-                                                ++pblock->nNonce;
-                                                --nMaxTries;
-                                            }
-                                            if (nMaxTries == 0) {
-                                                break;
-                                            }
-                                            if (pblock->nNonce == nInnerLoopCount) {
-                                                continue;
-                                            }
-                                            std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
-                                            if (!ProcessNewBlock(Params(), shared_pblock, true, nullptr)) {
-                                                LogPrint(BCLog::MINER, "CMasternodePayments::Miner ProcessNewBlock, block not accepted\n");
-                                            } else {
-                                                LogPrint(BCLog::MINER, "CMasternodePayments::Miner ProcessNewBlock %s\n", pblock->GetHash().GetHex());
-                                            }
-                                            miner_finish = true;
-                                            miner_running = false;
+                            LogPrint(BCLog::MINER, "CMasternodePayments::Miner MY REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
+                            std::shared_ptr<CReserveScript> coinbaseScript = std::make_shared<CReserveScript>();
+                            coinbaseScript->reserveScript = pubkeyScript;
+                            unsigned int nExtraNonce = 0;
+                            uint64_t nMaxTries = 1000000000;
+                            static const int nInnerLoopCount = 0x10000;
+                            if (!miner_running) {
+                                while (!miner_finish && !ShutdownRequested()) {
+                                    miner_running = true;
+                                    std::unique_ptr<CBlockTemplate> pblocktemplate(BlockAssembler(Params()).CreateNewBlock(coinbaseScript->reserveScript));
+                                    if (!pblocktemplate.get()) {
+                                        LogPrint(BCLog::MINER, "CMasternodePayments::Miner Error: Couldn't create new block\n");
+                                    } else {
+                                        CBlock *pblock = &pblocktemplate->block;
+                                        {
+                                            LOCK(cs_main);
+                                            IncrementExtraNonce(pblock, chainActive.Tip(), nExtraNonce);
                                         }
+                                        while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount && !CheckProofOfWork(pblock->GetHash(), pblock->nBits, Params().GetConsensus())) {
+                                            ++pblock->nNonce;
+                                            --nMaxTries;
+                                        }
+                                        if (nMaxTries == 0) {
+                                            break;
+                                        }
+                                        if (pblock->nNonce == nInnerLoopCount) {
+                                            continue;
+                                        }
+                                        std::shared_ptr<const CBlock> shared_pblock = std::make_shared<const CBlock>(*pblock);
+                                        if (!ProcessNewBlock(Params(), shared_pblock, true, nullptr)) {
+                                            LogPrint(BCLog::MINER, "CMasternodePayments::Miner ProcessNewBlock, block not accepted\n");
+                                        } else {
+                                            LogPrint(BCLog::MINER, "CMasternodePayments::Miner ProcessNewBlock %s\n", pblock->GetHash().GetHex());
+                                        }
+                                        miner_finish = true;
+                                        miner_running = false;
                                     }
                                 }
-                            } else {
-                                int nCount;
-                                masternode_info_t mnInfo;
-                                if(mnodeman.GetNextMasternodeInQueueForPayment(nHeight, true, nCount, mnInfo)) {
-                                    pubkeyScript = GetScriptForDestination(mnInfo.pubKeyCollateralAddress.GetID());
-                                    ExtractDestination(pubkeyScript, address1);
-                                    address2 = EncodeDestination(address1);
-                                    LogPrint(BCLog::MINER, "CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
-                                } else {
-                                    LogPrint(BCLog::MINER, "CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, "unknown");
-                                }
                             }
+                        } else {
+                            CTxDestination address1;
+                            std::string address2;
+                            ExtractDestination(pubkeyScript, address1);
+                            address2 = EncodeDestination(address1);
+                            LogPrint(BCLog::MINER, "CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, address2);
                         }
+                    } else {
+                        LogPrint(BCLog::MINER, "CMasternodePayments::Miner ALIEN REWARD BLOCK: %d WINNER:%s\n", nHeight, "unknown");
                     }
                 }
             }
