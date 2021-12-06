@@ -54,10 +54,11 @@ namespace BCLog {
         QT          = (1 << 19),
         LEVELDB     = (1 << 20),
         MASTERNODE  = (1 << 21),
-        MNPAYMENTS  = (1 << 22),
-        MNSYNC      = (1 << 23),
-        SPORK       = (1 << 24),
-        GOBJECT     = (1 << 25),
+        MINER       = (1 << 22),
+        MNPAYMENTS  = (1 << 23),
+        MNSYNC      = (1 << 24),
+        SPORK       = (1 << 25),
+        GOBJECT     = (1 << 26),
         ALL         = ~(uint32_t)0,
     };
 
