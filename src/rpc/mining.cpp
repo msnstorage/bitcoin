@@ -475,13 +475,13 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
 
     // when enforcement is on we need information about a masternode payee or otherwise our block is going to be orphaned by the network
     CScript payee;
-    if (sporkManager.IsSporkActive(SPORK_8_MASTERNODE_PAYMENT_ENFORCEMENT)
+    if (sporkManager.IsSporkActive(SPORK_1_MASTERNODE_PAYMENT_ENFORCEMENT)
         && !masternodeSync.IsWinnersListSynced()
         && !mnpayments.GetBlockPayee(chainActive.Height() + 1, payee))
             throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Bitcoin Core is downloading masternode winners...");
 
     // next bock is a superblock and we need governance info to correctly construct it
-    if (sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED)
+    if (sporkManager.IsSporkActive(SPORK_2_SUPERBLOCKS_ENABLED)
         && !masternodeSync.IsSynced()
         && CSuperblock::IsValidBlockHeight(chainActive.Height() + 1))
             throw JSONRPCError(RPC_CLIENT_IN_INITIAL_DOWNLOAD, "Bitcoin Core is syncing with network...");
@@ -720,7 +720,7 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     }
     result.pushKV("masternode", masternodeObj);
     result.pushKV("masternode_payments_started", pindexPrev->nHeight + 1 > Params().GetConsensus().nMasternodePaymentsStartBlock);
-    result.pushKV("masternode_payments_enforced", sporkManager.IsSporkActive(SPORK_8_MASTERNODE_PAYMENT_ENFORCEMENT));
+    result.pushKV("masternode_payments_enforced", sporkManager.IsSporkActive(SPORK_1_MASTERNODE_PAYMENT_ENFORCEMENT));
 
     UniValue superblockObjArray(UniValue::VARR);
     if(pblock->voutSuperblock.size()) {
@@ -737,7 +737,7 @@ static UniValue getblocktemplate(const JSONRPCRequest& request)
     }
     result.pushKV("superblock", superblockObjArray);
     result.pushKV("superblocks_started", pindexPrev->nHeight + 1 > Params().GetConsensus().nSuperblockStartBlock);
-    result.pushKV("superblocks_enabled", sporkManager.IsSporkActive(SPORK_9_SUPERBLOCKS_ENABLED));
+    result.pushKV("superblocks_enabled", sporkManager.IsSporkActive(SPORK_2_SUPERBLOCKS_ENABLED));
 
     if (!pblocktemplate->vchCoinbaseCommitment.empty()) {
         result.pushKV("default_witness_commitment", HexStr(pblocktemplate->vchCoinbaseCommitment.begin(), pblocktemplate->vchCoinbaseCommitment.end()));

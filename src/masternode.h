@@ -247,7 +247,7 @@ public:
         if(nActiveState == MASTERNODE_ENABLED) {
             return true;
         }
-        if(!sporkManager.IsSporkActive(SPORK_14_REQUIRE_SENTINEL_FLAG) &&
+        if(!sporkManager.IsSporkActive(SPORK_6_REQUIRE_SENTINEL_FLAG) &&
            (nActiveState == MASTERNODE_WATCHDOG_EXPIRED)) {
             return true;
         }
