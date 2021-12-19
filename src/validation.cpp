@@ -2150,11 +2150,6 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                          REJECT_INVALID, "bad-cb-payee");
     }
 
-    if (pindex->nHeight > Params().GetConsensus().nMasternodePaymentsStartBlock) {
-        return state.DoS(100, error("ConnectBlock() : reject proof-of-work at height %d", pindex->nHeight),
-                         REJECT_INVALID, "bad-block-type");
-    }
-    
     if (!control.Wait())
         return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
     int64_t nTime4 = GetTimeMicros(); nTimeVerify += nTime4 - nTime2;
