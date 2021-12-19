@@ -1613,7 +1613,7 @@ void ThreadCheckMasternode(CConnman& connman)
 
             if(nTick % 3 == 0) {
                 if(masternodeSync.IsBlockchainSynced() && masternodeSync.IsSynced()
-                                                       && chainActive.Height() > Params().GetConsensus().nMasternodePaymentsStartBlock) {
+                                                       && chainActive.Height() >= Params().GetConsensus().nMasternodePaymentsStartBlock) {
                     int nCount;
                     int nHeight;
                     masternode_info_t mnInfo;
