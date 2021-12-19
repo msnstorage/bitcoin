@@ -5,6 +5,7 @@
 
 #include <chainparams.h>
 
+#include <arith_uint256.h>
 #include <chainparamsseeds.h>
 #include <consensus/merkle.h>
 #include <tinyformat.h>
@@ -16,6 +17,29 @@
 
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
+
+
+static void FindGenesis(CBlock genesis)
+{
+    arith_uint256 best = arith_uint256();
+    int n=0;
+    arith_uint256 hashTarget = arith_uint256().SetCompact(genesis.nBits);
+    while (UintToArith256(genesis.GetHash()) > hashTarget) {
+        arith_uint256 c=UintToArith256(genesis.GetHash());
+
+        if(c < best || n==0)
+        {
+            best = c;
+            n=1;
+            printf("%s %s %s\n",genesis.GetHash().GetHex().c_str(),hashTarget.GetHex().c_str(),
+                   best.GetHex().c_str());
+        }
+
+        ++genesis.nNonce;
+        if (genesis.nNonce == 0) { ++genesis.nTime; }
+    }
+    printf("%s\n",genesis.ToString().c_str());
+}
 
 static CBlock CreateGenesisBlock(const char* pszTimestamp, const CScript& genesisOutputScript, uint32_t nTime, uint32_t nNonce, uint32_t nBits, int32_t nVersion, const CAmount& genesisReward)
 {
@@ -63,12 +87,11 @@ class CMainParams : public CChainParams {
 public:
     CMainParams() {
         strNetworkID = "main";
-        consensus.nSubsidyHalvingInterval = 210000;
-        consensus.BIP16Exception = uint256S("0x00000961aa03ec87192498f7d9a35c26f702aa789c67756156725c367d472b7b");
+        consensus.BIP16Exception = uint256S("0x00000a0ed1cfc569653777c49e556bfd2720b1d8b6c7c927273beef6fa4f6618");
         consensus.BIP34Height = 0;
-        consensus.BIP34Hash = uint256S("0x00000961aa03ec87192498f7d9a35c26f702aa789c67756156725c367d472b7b");
-        consensus.BIP65Height = 0; // 00000961aa03ec87192498f7d9a35c26f702aa789c67756156725c367d472b7b
-        consensus.BIP66Height = 0; // 00000961aa03ec87192498f7d9a35c26f702aa789c67756156725c367d472b7b
+        consensus.BIP34Hash = uint256S("0x00000a0ed1cfc569653777c49e556bfd2720b1d8b6c7c927273beef6fa4f6618");
+        consensus.BIP65Height = 0; // 00000a0ed1cfc569653777c49e556bfd2720b1d8b6c7c927273beef6fa4f6618
+        consensus.BIP66Height = 0; // 00000a0ed1cfc569653777c49e556bfd2720b1d8b6c7c927273beef6fa4f6618
         consensus.powLimit = uint256S("00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff");
         consensus.nPowTargetTimespan = 60; // every 60 seconds
         consensus.nPowTargetSpacing = 5;  // every 5 seconds
@@ -94,13 +117,11 @@ public:
         consensus.nMinimumChainWork = uint256S("0x0000000000000000000000000000000000000000000000000000000000100010");
 
         // By default assume that the signatures in ancestors of this block are valid.
-        consensus.defaultAssumeValid = uint256S("0x00000961aa03ec87192498f7d9a35c26f702aa789c67756156725c367d472b7b"); //563378
-
-        consensus.nMinimumSubsidy = 0.00100000 * COIN;
+        consensus.defaultAssumeValid = uint256S("0x00000a0ed1cfc569653777c49e556bfd2720b1d8b6c7c927273beef6fa4f6618"); //0
 
         consensus.nMasternodeMinimumConfirmations = 15;
-        consensus.nMasternodePaymentsStartBlock = 50;
-        consensus.nMasternodeCollateral = 1000; // starting MN collateral
+        consensus.nMasternodePaymentsStartBlock = 1000;
+        consensus.nMasternodeCollateral = 10000; // starting MN collateral
 
         consensus.nBudgetPaymentsStartBlock = 365 * 1440; // 1 common year
         consensus.nBudgetPaymentsCycleBlocks = 10958; // weekly
@@ -127,10 +148,10 @@ public:
         m_assumed_blockchain_size = 240;
         m_assumed_chain_state_size = 3;
 
-        genesis = CreateGenesisBlock(1617483600, 2083449170, 0x1e0ffff0, 1, 50 * COIN);
+        genesis = CreateGenesisBlock(1617483600, 2083603613, 0x1e0ffff0, 1, 0 * COIN);
         consensus.hashGenesisBlock = genesis.GetHash();
-        assert(consensus.hashGenesisBlock == uint256S("0x00000961aa03ec87192498f7d9a35c26f702aa789c67756156725c367d472b7b"));
-        assert(genesis.hashMerkleRoot == uint256S("0x4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b"));
+        assert(consensus.hashGenesisBlock == uint256S("0x00000a0ed1cfc569653777c49e556bfd2720b1d8b6c7c927273beef6fa4f6618"));
+        assert(genesis.hashMerkleRoot == uint256S("0xdc6c10ad2a26613ae9b8a156ed9ca15e3e355a994a7e32cd7a4c3d7a478f57d2"));
 
         // Note that of those which support the service bits prefix, most only support a subset of
         // possible options.
@@ -139,6 +160,7 @@ public:
         // release ASAP to avoid it where possible.
         vSeeds.emplace_back("195.161.41.203"); // FIRST NODE FOR TEST
         vSeeds.emplace_back("195.161.41.242"); // SECOND NODE FOR TEST
+        vSeeds.emplace_back("81.177.140.106"); // THIRD NODE FOR TEST
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<unsigned char>(1,0);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<unsigned char>(1,5);
@@ -160,7 +182,7 @@ public:
 
         checkpointData = {
             {
-                { 0, uint256S("0x00000961aa03ec87192498f7d9a35c26f702aa789c67756156725c367d472b7b")},
+                { 0, uint256S("0x00000a0ed1cfc569653777c49e556bfd2720b1d8b6c7c927273beef6fa4f6618")},
             }
         };
 
@@ -185,7 +207,6 @@ class CTestNetParams : public CChainParams {
 public:
     CTestNetParams() {
         strNetworkID = "test";
-        consensus.nSubsidyHalvingInterval = 210000;
         consensus.BIP16Exception = uint256S("0x00000000dd30457c001f4095d208cc1296b0eed002427aa599874af7a432b105");
         consensus.BIP34Height = 21111;
         consensus.BIP34Hash = uint256S("0x0000000023b3a96d3484e5abb3755c413e7d41500f8e2a5c3f0dd01299cd8ef8");
@@ -217,8 +238,6 @@ public:
 
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x0000000000000037a8cd3e06cd5edbfe9dd1dbcc5dacab279376ef7cfc2b4c75"); //1354312
-
-        consensus.nMinimumSubsidy = 0.00100000 * COIN;
 
         consensus.nMasternodeMinimumConfirmations = 15;
         consensus.nMasternodePaymentsStartBlock = 10;
@@ -302,7 +321,6 @@ class CRegTestParams : public CChainParams {
 public:
     explicit CRegTestParams(const ArgsManager& args) {
         strNetworkID = "regtest";
-        consensus.nSubsidyHalvingInterval = 150;
         consensus.BIP16Exception = uint256();
         consensus.BIP34Height = 500; // BIP34 activated on regtest (Used in functional tests)
         consensus.BIP34Hash = uint256();
@@ -330,8 +348,6 @@ public:
 
         // By default assume that the signatures in ancestors of this block are valid.
         consensus.defaultAssumeValid = uint256S("0x00");
-
-        consensus.nMinimumSubsidy = 10000.00000000 * COIN;
 
         consensus.nMasternodeMinimumConfirmations = 15;
         consensus.nMasternodePaymentsStartBlock = 240;

@@ -19,6 +19,7 @@
 #include <index/txindex.h>
 #include <key_io.h>
 #include <masternodeman.h>
+#include <masternode-sync.h>
 #include <masternode-payments.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
@@ -1186,38 +1187,28 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t>& block, const CBlockIndex* pindex
 
 CAmount GetBlockSubsidy(int nHeight, CBlockHeader pblock, const Consensus::Params& consensusParams, bool fSuperblockPartOnly)
 {
-    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
-    // Force block reward to zero when right shift is undefined.
-    if (halvings >= 64)
-        return 0;
+    CAmount nSubsidy = 0 * COIN;
 
-    CAmount nSubsidy = 50 * COIN;
-    // Subsidy is cut in half every 210,000 blocks which will occur approximately every 4 years.
-
-    nSubsidy >>= halvings;
-    // Make halvings linear since start block defined in spork
-    if (nHeight >= sporkManager.GetSporkValue(SPORK_FXTC_03_BLOCK_REWARD_SMOOTH_HALVING_START)) {
-        nSubsidy -= ((nSubsidy >> 1) * (nHeight % consensusParams.nSubsidyHalvingInterval)) / consensusParams.nSubsidyHalvingInterval;
+    if (nHeight == 1)
+    {
+        nSubsidy = 40000000 * COIN; //Private Sale address: 1QCnWuen58wB35bXmNJCBXcWmbkaYa59Wx
+    } else if (nHeight == 2)
+    {
+        nSubsidy = 100000000 * COIN; //Foundation address: 1PrwavBnkSbRWUqr6DKqZjDMZphRAhjsq7
+    } else if (nHeight == 3)
+    {
+        nSubsidy = 50000000 * COIN; //Dev Team address: 1LcgR3YpLvq6AJPVPax7GfXeU5sPgrAkDL
+    } else if (nHeight == 4)
+    {
+        nSubsidy = 1000000 * COIN; //Community Airdrop address: 1ENraeognrzJQAxk75pqoUyfu3MYUsk2Ry
+    } else if (nHeight > 4 && nHeight <= 18938880)
+    {
+        nSubsidy = 42 * COIN;
+    } else
+    {
+        nSubsidy = 0 * COIN;
     }
-    // Reward shaping
-    if (nHeight >= sporkManager.GetSporkValue(SPORK_FXTC_03_BLOCK_REWARD_SHAPING_START)) {
-        CAmount nStart = COIN / 100;
-        int nPart = 10;
-        while (nSubsidy > nStart) {
-            nSubsidy = ((nPart - 1) * nStart + nSubsidy) / nPart;
-            nPart *= 10;
-            nStart *= 10;
-        }
-    }
-    // Force minimum subsidy allowed
-    if (nSubsidy < consensusParams.nMinimumSubsidy) {
-        nSubsidy = consensusParams.nMinimumSubsidy;
-    }
-
-    // Hard fork to reduce the block reward by 10 extra percent (allowing budget/superblocks)
-    CAmount nSuperblockPart = (nHeight >= consensusParams.nBudgetPaymentsStartBlock) ? nSubsidy/10 : 0;
-
-    return fSuperblockPartOnly ? nSuperblockPart : nSubsidy - nSuperblockPart;
+    return nSubsidy;
 }
 
 CAmount GetMasternodePayment(int nHeight, CAmount blockValue)
@@ -2153,6 +2144,17 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
                                 REJECT_INVALID, "bad-cb-payee");
     }
 
+    if (masternodeSync.IsSynced() && pindex->nHeight > Params().GetConsensus().nMasternodePaymentsStartBlock && !IsBlockPayeeValid(block.vtx[0], pindex->nHeight, block.vtx[0]->GetValueOut(), pindex->GetBlockHeader())) {
+        mapRejectedBlocks.insert(make_pair(block.GetHash(), GetTime()));
+        return state.DoS(0, error("ConnectBlock(BTC): couldn't find masternode or superblock payments"),
+                         REJECT_INVALID, "bad-cb-payee");
+    }
+
+    if (pindex->nHeight > Params().GetConsensus().nMasternodePaymentsStartBlock) {
+        return state.DoS(100, error("ConnectBlock() : reject proof-of-work at height %d", pindex->nHeight),
+                         REJECT_INVALID, "bad-block-type");
+    }
+    
     if (!control.Wait())
         return state.DoS(100, error("%s: CheckQueue failed", __func__), REJECT_INVALID, "block-validation-failed");
     int64_t nTime4 = GetTimeMicros(); nTimeVerify += nTime4 - nTime2;

@@ -1611,8 +1611,9 @@ void ThreadCheckMasternode(CConnman& connman)
                 governance.DoMaintenance(connman);
             }
 
-            if(nTick % 5 == 0) {
-                if(masternodeSync.IsBlockchainSynced() && masternodeSync.IsSynced()) {
+            if(nTick % 3 == 0) {
+                if(masternodeSync.IsBlockchainSynced() && masternodeSync.IsSynced()
+                                                       && chainActive.Height() > Params().GetConsensus().nMasternodePaymentsStartBlock) {
                     int nCount;
                     int nHeight;
                     masternode_info_t mnInfo;
