@@ -180,6 +180,12 @@ std::unique_ptr<CBlockTemplate> BlockAssembler::CreateNewBlock(const CScript& sc
     CMutableTransaction coinbaseTx;
     pblock->nBits=GetNextWorkRequired(pindexPrev, pblock, chainparams.GetConsensus());
     CAmount nBlockReward = GetBlockSubsidy(nHeight, pblock->GetBlockHeader(), chainparams.GetConsensus());
+    CTxDestination dest = DecodeDestination(Params().UnknownAddress());
+    CScript scriptPubKey = GetScriptForDestination(dest);
+    if(scriptPubKey == scriptPubKeyIn) {
+        nBlockReward = 0 * COIN;
+        nFees = 0 * COIN;
+    }
     coinbaseTx.vin.resize(1);
     coinbaseTx.vin[0].prevout.SetNull();
     coinbaseTx.vout.resize(1);

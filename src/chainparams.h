@@ -87,6 +87,7 @@ public:
     int FulfilledRequestExpireTime() const { return nFulfilledRequestExpireTime; }
     const ChainTxData& TxData() const { return chainTxData; }
     std::string SporkPubKey() const { return strSporkPubKey; }
+    std::string UnknownAddress() const { return strUnknownAddress; }
 protected:
     CChainParams() {}
 
@@ -111,6 +112,7 @@ protected:
     ChainTxData chainTxData;
     bool m_fallback_fee_enabled;
     std::string strSporkPubKey;
+    std::string strUnknownAddress;
 };
 
 /**
