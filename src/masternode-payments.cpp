@@ -177,7 +177,7 @@ bool IsBlockPayeeValid(const CTransactionRef txNew, int nBlockHeight, CAmount bl
         }
 
         LogPrintf("IsBlockPayeeValid -- WARNING: Masternode payment enforcement is disabled, accepting any payee\n");
-        return true;
+        return false;
     }
 
     // superblocks started
@@ -639,6 +639,8 @@ bool CMasternodePayments::IsTransactionValid(const CTransactionRef txNew, int nB
 
     if(mapMasternodeBlocks.count(nBlockHeight)){
         return mapMasternodeBlocks[nBlockHeight].IsTransactionValid(txNew);
+    } else {
+        return false;
     }
 
     return true;
