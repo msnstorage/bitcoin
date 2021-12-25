@@ -179,7 +179,6 @@ public:
         nPoolMaxTransactions = 3;
         nFulfilledRequestExpireTime = 60*60; // fulfilled requests expire in 1 hour
         strSporkPubKey = "04491f11731dd8c8a6f6418e69d01cf35a93327971c3c207dde66b58fc2e7e5c9510b5a80a61bc4982fea1533e96f25a1319cd602e14edd1702d652cd3da367bcb";
-        strUnknownAddress = "1B2JbASwHnS3Hj2uGADxgJK6JrU92MSYYL";
 
         checkpointData = {
             {
