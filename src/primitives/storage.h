@@ -7,7 +7,6 @@
 #define STORAGE_H
 
 #include <hash.h>
-#include <tinyformat.h>
 #include <serialize.h>
 #include <uint256.h>
 #include <util/strencodings.h>

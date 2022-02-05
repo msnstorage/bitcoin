@@ -5,11 +5,9 @@
 #ifndef STORAGE_SYNC_H
 #define STORAGE_SYNC_H
 
-#include <chain.h>
 #include <net.h>
 #include <primitives/transaction.h>
-
-#include <univalue.h>
+#include <serialize.h>
 
 class CStorageSync;
 
@@ -23,11 +21,11 @@ class CStorageSync
 {
 private:
     std::map<uint256, int64_t> mapStorageHeaders;
-
+    std::map<uint256, std::vector<CHeadFilePartL>> mapFilesPartsForDownoads;
 public:
-    void ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStream& vRecv);
+    void ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStream& vRecv, CConnman& connman);
     void ProcessTick(CConnman& connman);
-    void ProcessHeaders(CTransaction& tx);
+    void ProcessHeaders(const CTransaction& tx);
 };
 
 #endif // STORAGE_SYNC_H

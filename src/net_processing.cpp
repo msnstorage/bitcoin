@@ -30,6 +30,7 @@
 #include <tinyformat.h>
 #include <txmempool.h>
 #include <spork.h>
+#include <storage/storage-sync.h>
 #include <ui_interface.h>
 #include <util/system.h>
 #include <util/moneystr.h>
@@ -2435,6 +2436,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
         vRecv >> ptx;
         const CTransaction& tx = *ptx;
 
+        LogPrintf("TX=%s\n", tx.ToString());
         CInv inv(MSG_TX, tx.GetHash());
         pfrom->AddInventoryKnown(inv);
 
@@ -3156,6 +3158,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             sporkManager.ProcessSpork(pfrom, strCommand, vRecv, *connman);
             masternodeSync.ProcessMessage(pfrom, strCommand, vRecv);
             governance.ProcessMessage(pfrom, strCommand, vRecv, *connman);
+            storageSync.ProcessMessage(pfrom, strCommand, vRecv, *connman);
 
             return true;
         }

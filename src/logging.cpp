@@ -130,6 +130,7 @@ const CLogCategoryDesc LogCategories[] =
     {BCLog::SPORK, "spork"},
     {BCLog::MNPAYMENTS, "mnpayments"},
     {BCLog::GOBJECT, "gobject"},
+    {BCLog::STORAGE, "storage"},
     {BCLog::ALL, "1"},
     {BCLog::ALL, "all"},
 };

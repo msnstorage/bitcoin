@@ -274,6 +274,7 @@ bool CBlockTreeDB::LoadBlockIndexGuts(const Consensus::Params& consensusParams, 
                 pindexNew->nStatus        = diskindex.nStatus;
                 pindexNew->nTx            = diskindex.nTx;
                 pindexNew->nMoneySupply   = diskindex.nMoneySupply;
+                pindexNew->nStorageSize   = diskindex.nStorageSize;
 
                 if (pindexNew->nHeight > consensusParams.nlastValidPowHashHeight)
                 if (!CheckProofOfWork(pindexNew->GetBlockHash(), pindexNew->nBits, consensusParams))

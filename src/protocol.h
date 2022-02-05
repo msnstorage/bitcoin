@@ -250,6 +250,12 @@ extern const char *MNGOVERNANCESYNC;
 extern const char *MNGOVERNANCEOBJECT;
 extern const char *MNGOVERNANCEOBJECTVOTE;
 extern const char *MNVERIFY;
+extern const char *CHKFHEAD;
+extern const char *FHSTAT;
+extern const char *FHGET;
+extern const char *FH;
+extern const char *FGET;
+extern const char *FPART;
 };
 
 /* Get a vector of all valid message types (see above) */

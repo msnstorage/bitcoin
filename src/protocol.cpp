@@ -54,6 +54,12 @@ const char *MNGOVERNANCESYNC="govsync";
 const char *MNGOVERNANCEOBJECT="govobj";
 const char *MNGOVERNANCEOBJECTVOTE="govobjvote";
 const char *MNVERIFY="mnv";
+const char *CHKFHEAD="chkfhead";
+const char *FHSTAT="fhstat";
+const char *FHGET="fhget";
+const char *FH="fh";
+const char *FGET="fget";
+const char *FPART="fpart";
 } // namespace NetMsgType
 
 /** All known message types. Keep this in the same order as the list of
@@ -98,6 +104,12 @@ const static std::string allNetMessageTypes[] = {
     NetMsgType::MNGOVERNANCEOBJECT,
     NetMsgType::MNGOVERNANCEOBJECTVOTE,
     NetMsgType::MNVERIFY,
+    NetMsgType::CHKFHEAD,
+    NetMsgType::FHSTAT,
+    NetMsgType::FHGET,
+    NetMsgType::FH,
+    NetMsgType::FGET,
+    NetMsgType::FPART,
 };
 const static std::vector<std::string> allNetMessageTypesVec(allNetMessageTypes, allNetMessageTypes+ARRAYLEN(allNetMessageTypes));
 

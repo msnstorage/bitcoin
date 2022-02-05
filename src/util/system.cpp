@@ -722,6 +722,7 @@ fs::path GetDefaultDataDir()
 }
 
 static fs::path g_blocks_path_cache_net_specific;
+static fs::path g_storage_path_cache_net_specific;
 static fs::path pathCached;
 static fs::path pathCachedNetSpecific;
 static CCriticalSection csPathCached;
@@ -751,6 +752,36 @@ const fs::path &GetBlocksDir()
     path /= BaseParams().DataDir();
     path /= "blocks";
     fs::create_directories(path);
+    return path;
+}
+
+const fs::path &GetStorageDir()
+{
+
+    LOCK(csPathCached);
+
+    fs::path &path = g_storage_path_cache_net_specific;
+
+    // This can be called during exceptions by LogPrintf(), so we cache the
+    // value so we don't have to do memory allocations after that.
+    if (!path.empty())
+        return path;
+
+    if (gArgs.IsArgSet("-storagedir")) {
+        path = fs::system_complete(gArgs.GetArg("-storagedir", ""));
+        if (!fs::is_directory(path)) {
+            path = "";
+            return path;
+        }
+    } else {
+        path = GetDataDir(false);
+    }
+
+    path /= BaseParams().DataDir();
+    path /= "storage";
+    fs::create_directories(path);
+    fs::create_directories(path / "headers");
+    fs::create_directories(path / "files");
     return path;
 }
 
@@ -793,6 +824,7 @@ void ClearDatadirCache()
     pathCached = fs::path();
     pathCachedNetSpecific = fs::path();
     g_blocks_path_cache_net_specific = fs::path();
+    g_storage_path_cache_net_specific = fs::path();
 }
 
 fs::path GetConfigFile(const std::string& confPath)

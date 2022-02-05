@@ -102,6 +102,7 @@ bool TryCreateDirectories(const fs::path& p);
 fs::path GetDefaultDataDir();
 // The blocks directory is always net specific.
 const fs::path &GetBlocksDir();
+const fs::path &GetStorageDir();
 const fs::path &GetDataDir(bool fNetSpecific = true);
 void ClearDatadirCache();
 fs::path GetConfigFile(const std::string& confPath);

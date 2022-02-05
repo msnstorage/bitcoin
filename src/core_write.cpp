@@ -228,6 +228,26 @@ void TxToUniv(const CTransaction& tx, const uint256& hashBlock, UniValue& entry,
     }
     entry.pushKV("vout", vout);
 
+    UniValue vstorage(UniValue::VARR);
+    for (unsigned int i = 0; i < tx.vstorage.size(); i++) {
+        const CTxStorage& txstorage = tx.vstorage[i];
+
+        UniValue out(UniValue::VOBJ);
+
+        UniValue storagehead(UniValue::VARR);
+        for (unsigned int j = 0; j < txstorage.vhead.size(); j++) {
+            const CStorageHead& head = txstorage.vhead[j];
+            UniValue sh(UniValue::VOBJ);
+            sh.pushKV("hash", head.hash.GetHex());
+            sh.pushKV("size", (int64_t) head.size);
+            storagehead.push_back(sh);
+        }
+        out.pushKV("name", txstorage.sName);
+        out.pushKV("head", storagehead);
+        vstorage.push_back(out);
+    }
+    entry.pushKV("vstorage", vstorage);
+
     if (!hashBlock.IsNull())
         entry.pushKV("blockhash", hashBlock.GetHex());
 

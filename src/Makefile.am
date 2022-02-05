@@ -251,8 +251,9 @@ BITCOIN_CORE_H += \
   messagesigner.h \
   netfulfilledman.h \
   spork.h \
-  sporkdb.h
-
+  sporkdb.h \
+  primitives/storage.h \
+  storage/storage-sync.h
 
 obj/build.h: FORCE
 	@$(MKDIR_P) $(builddir)/obj
@@ -333,7 +334,8 @@ libbitcoin_server_a_SOURCES += \
   rpc/governance.cpp \
   rpc/masternode.cpp \
   spork.cpp \
-  sporkdb.cpp
+  sporkdb.cpp \
+  storage/storage-sync.cpp
 #
 
 if !ENABLE_WALLET

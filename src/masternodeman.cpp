@@ -18,6 +18,7 @@
 #include <pow.h>
 #include <shutdown.h>
 #include <script/standard.h>
+#include <storage/storage-sync.h>
 #include <util/system.h>
 
 extern void Misbehaving(NodeId nodeid, int howmuch, const std::string& message="");
@@ -1585,6 +1586,7 @@ void ThreadCheckMasternode(CConnman& connman)
 
         // try to sync from all available nodes, one step at a time
         masternodeSync.ProcessTick(connman);
+        storageSync.ProcessTick(connman);
 
         if(masternodeSync.IsBlockchainSynced() && !ShutdownRequested()) {
 

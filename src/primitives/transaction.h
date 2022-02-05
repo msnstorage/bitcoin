@@ -10,6 +10,7 @@
 #include <amount.h>
 #include <script/script.h>
 #include <serialize.h>
+#include <primitives/storage.h>
 #include <uint256.h>
 
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;
@@ -189,6 +190,7 @@ struct CMutableTransaction;
  * - int32_t nVersion
  * - std::vector<CTxIn> vin
  * - std::vector<CTxOut> vout
+ * - std::vector<CTxStorage> vstorage
  * - uint32_t nLockTime
  *
  * Extended transaction serialization format:
@@ -197,9 +199,11 @@ struct CMutableTransaction;
  * - unsigned char flags (!= 0)
  * - std::vector<CTxIn> vin
  * - std::vector<CTxOut> vout
+ * - std::vector<CTxStorage> vstorage
  * - if (flags & 1):
  *   - CTxWitness wit;
  * - uint32_t nLockTime
+ * - std::vector<CTxStorage> vstorage
  */
 template<typename Stream, typename TxType>
 inline void UnserializeTransaction(TxType& tx, Stream& s) {
@@ -209,6 +213,7 @@ inline void UnserializeTransaction(TxType& tx, Stream& s) {
     unsigned char flags = 0;
     tx.vin.clear();
     tx.vout.clear();
+    tx.vstorage.clear();
     /* Try to read the vin. In case the dummy is there, this will be read as an empty vector. */
     s >> tx.vin;
     if (tx.vin.size() == 0 && fAllowWitness) {
@@ -217,10 +222,12 @@ inline void UnserializeTransaction(TxType& tx, Stream& s) {
         if (flags != 0) {
             s >> tx.vin;
             s >> tx.vout;
+            s >> tx.vstorage;
         }
     } else {
         /* We read a non-empty vin. Assume a normal vout follows. */
         s >> tx.vout;
+        s >> tx.vstorage;
     }
     if ((flags & 1) && fAllowWitness) {
         /* The witness flag is present, and we support witnesses. */
@@ -238,6 +245,7 @@ inline void UnserializeTransaction(TxType& tx, Stream& s) {
         throw std::ios_base::failure("Unknown transaction optional data");
     }
     s >> tx.nLockTime;
+
 }
 
 template<typename Stream, typename TxType>
@@ -261,6 +269,7 @@ inline void SerializeTransaction(const TxType& tx, Stream& s) {
     }
     s << tx.vin;
     s << tx.vout;
+    s << tx.vstorage;
     if (flags & 1) {
         for (size_t i = 0; i < tx.vin.size(); i++) {
             s << tx.vin[i].scriptWitness.stack;
@@ -292,6 +301,7 @@ public:
     // structure, including the hash.
     const std::vector<CTxIn> vin;
     const std::vector<CTxOut> vout;
+    const std::vector<CTxStorage> vstorage;
     const int32_t nVersion;
     const uint32_t nLockTime;
 
@@ -324,7 +334,7 @@ public:
     CTransaction(deserialize_type, Stream& s) : CTransaction(CMutableTransaction(deserialize, s)) {}
 
     bool IsNull() const {
-        return vin.empty() && vout.empty();
+        return vin.empty() && vout.empty() && vstorage.empty();
     }
 
     const uint256& GetHash() const { return hash; }
@@ -375,6 +385,7 @@ struct CMutableTransaction
 {
     std::vector<CTxIn> vin;
     std::vector<CTxOut> vout;
+    std::vector<CTxStorage> vstorage;
     int32_t nVersion;
     uint32_t nLockTime;
 
