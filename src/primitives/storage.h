@@ -265,7 +265,7 @@ public:
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
 
-    CFH(): data(NULL_INDEX) { }
+    CFH(): hash(uint256S("")), filehash(uint256S("")) { }
     CFH(const uint256& hashIn, const uint256& filehashIn, std::vector<unsigned char> dataIn): hash(hashIn), filehash(filehashIn), data(dataIn) { }
 
     ADD_SERIALIZE_METHODS;

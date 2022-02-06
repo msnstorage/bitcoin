@@ -6,6 +6,7 @@
 
 #include <netmessagemaker.h>
 #include <util/system.h>
+#include "picosha2.h"
 
 class CStorageSync;
 CStorageSync storageSync;
@@ -166,9 +167,14 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             std::vector<unsigned char> fileData(fileSize);
             file.read((char*) &fileData[0], fileSize);
 
+            std::string hash_hex_str;
+            picosha2::hash256_hex_string(fileData, hash_hex_str);
+
             fh.hash = hash;
             fh.data = fileData;
-            fh.filehash = uint256(fileData);
+            fh.filehash = uint256S(hash_hex_str);
+
+            LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FHGET hash:%s size:%u\n", fh.hash.ToString(), fh.data.size());
 
             connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FH, fh));
         }
