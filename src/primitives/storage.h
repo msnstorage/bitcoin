@@ -216,4 +216,125 @@ public:
     std::string ToString() const;
 };
 
+/** An head of a storage.
+ */
+class CHeadFileStatus
+{
+public:
+    uint256 hash;
+    uint32_t status;
+
+    static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
+
+    CHeadFileStatus(): status(NULL_INDEX) { }
+    CHeadFileStatus(const uint256& hashIn, uint32_t statusIn): hash(hashIn), status(statusIn) { }
+
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(hash);
+        READWRITE(status);
+    }
+
+    void SetNull() { hash.SetNull();}
+    bool IsNull() const { return (hash.IsNull()); }
+
+    friend bool operator==(const CHeadFileStatus& a, const CHeadFileStatus& b)
+    {
+        return (a.hash == b.hash && a.status == b.status);
+    }
+
+    friend bool operator!=(const CHeadFileStatus& a, const CHeadFileStatus& b)
+    {
+        return !(a == b);
+    }
+
+    std::string ToString() const;
+};
+
+/** An head of a storage.
+ */
+class CFH
+{
+public:
+    uint256 hash;
+    uint256 filehash;
+    std::vector<unsigned char> data;
+
+    static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
+
+    CFH(): data(NULL_INDEX) { }
+    CFH(const uint256& hashIn, const uint256& filehashIn, std::vector<unsigned char> dataIn): hash(hashIn), filehash(filehashIn), data(dataIn) { }
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(hash);
+        READWRITE(filehash);
+        READWRITE(data);
+    }
+
+    void SetNull() { hash.SetNull(); filehash.SetNull(); data.clear(); }
+    bool IsNull() const { return (hash.IsNull() && filehash.IsNull() && data.size() == 0); }
+
+    friend bool operator==(const CFH& a, const CFH& b)
+    {
+        return (a.hash == b.hash && a.filehash == b.filehash && a.data == b.data);
+    }
+
+    friend bool operator!=(const CFH& a, const CFH& b)
+    {
+        return !(a == b);
+    }
+
+    std::string ToString() const;
+};
+
+/** An head of a storage.
+ */
+class CFP
+{
+public:
+    uint256 hash;
+    uint256 filehash;
+    uint32_t part_begin;
+    uint32_t part_end;
+    std::vector<unsigned char> data;
+
+    static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
+
+    CFP(): data(NULL_INDEX) { }
+    CFP(const uint256& hashIn, const uint256& filehashIn, uint32_t part_beginIn, uint32_t part_endIn, std::vector<unsigned char> dataIn): hash(hashIn), filehash(filehashIn), part_begin(part_beginIn), part_end(part_endIn), data(dataIn) { }
+
+    ADD_SERIALIZE_METHODS;
+
+    template <typename Stream, typename Operation>
+    inline void SerializationOp(Stream& s, Operation ser_action) {
+        READWRITE(hash);
+        READWRITE(filehash);
+        READWRITE(part_begin);
+        READWRITE(part_end);
+        READWRITE(data);
+    }
+
+    void SetNull() { hash.SetNull(); filehash.SetNull(); part_begin = 0; part_end = 0; data.clear(); }
+    bool IsNull() const { return (hash.IsNull() && filehash.IsNull() && part_begin == 0 && part_end == 0 && data.size() == 0); }
+
+    friend bool operator==(const CFP& a, const CFP& b)
+    {
+        return (a.hash == b.hash && a.filehash == b.filehash && a.part_begin == b.part_begin && a.part_end == b.part_end && a.data == b.data);
+    }
+
+    friend bool operator!=(const CFP& a, const CFP& b)
+    {
+        return !(a == b);
+    }
+
+    std::string ToString() const;
+};
+
+
 #endif // STORAGE_H

@@ -12,8 +12,8 @@ CStorageSync storageSync;
 
 void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStream& vRecv, CConnman& connman)
 {
-
-    if (strCommand == NetMsgType::FHSTAT) { //file head status
+    if (strCommand == NetMsgType::FHSTAT)
+    { //file head status
 
         uint256 hash;
         uint32_t status;
@@ -22,7 +22,9 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FHGET, hash)); //get storage headers
         }
         LogPrint(BCLog::STORAGE, "CStorageSync::ProcessMessage FHSTAT -- hash=%s status=%u peer=%d\n", hash.ToString(), status, pfrom->GetId());
-    } else if (strCommand == NetMsgType::FH) { //file head
+    }
+    else if (strCommand == NetMsgType::FH)
+    { //file head
 
         uint256 hash;
         uint256 filehash;
@@ -33,7 +35,7 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
         // open temp output file, and associate with CAutoFile
         const char* c = HeadFile.c_str();
 
-        if(!boost::filesystem::exists(c)){
+        if(!boost::filesystem::exists(c)) {
 
             std::ofstream out(c, std::ios::out | std::ios::binary | std::ios::app);
 
@@ -65,7 +67,9 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
         }
 
         LogPrint(BCLog::STORAGE, "CStorageSync::ProcessMessage FH -- hash=%s parts=%u peer=%d\n", filehash.ToString(), head.parts, pfrom->GetId());
-    } else if (strCommand == NetMsgType::FPART) { //file
+    }
+    else if (strCommand == NetMsgType::FPART)
+    { //file
         try {
             uint256 hash;
             uint256 filehash;
@@ -109,6 +113,111 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
         } catch (const std::exception& e) {
             LogPrint(BCLog::STORAGE, "ERROR Exception '%s' \n", e.what());
         }
+    }
+    else if (strCommand == NetMsgType::CHKFHEAD)
+    { //file
+        uint256 hash;
+        vRecv >> hash;
+
+        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- CHKFHEAD hash:%s\n",
+                 hash.ToString());
+
+        CHeadFileStatus fileHeadStatus;
+        fileHeadStatus.hash = hash;
+        fileHeadStatus.status = 0;
+
+        fs::path HeadFile = GetStorageDir() / "headers" / hash.ToString();
+        // open temp output file, and associate with CAutoFile
+        const char* c = HeadFile.c_str();
+
+        if(boost::filesystem::exists(c)) {
+            fileHeadStatus.status = 1;
+        } else {
+            fileHeadStatus.status = 0;
+        }
+
+        connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::CHKFHEAD, fileHeadStatus));
+    }
+    else if (strCommand == NetMsgType::FHGET)
+    { //file
+        uint256 hash;
+        vRecv >> hash;
+
+        CFH fh;
+
+        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FHGET hash:%s\n", hash.ToString());
+
+        fs::path HeadFile = GetStorageDir() / "headers" / hash.ToString();
+        // open temp output file, and associate with CAutoFile
+        const char* c = HeadFile.c_str();
+
+        if(boost::filesystem::exists(c)) {
+
+            // open the file:
+            std::streampos fileSize;
+            std::ifstream file(c, std::ios::binary);
+
+            // get its size:
+            file.seekg(0, std::ios::end);
+            fileSize = file.tellg();
+            file.seekg(0, std::ios::beg);
+
+            // read the data:
+            std::vector<unsigned char> fileData(fileSize);
+            file.read((char*) &fileData[0], fileSize);
+
+            fh.hash = hash;
+            fh.data = fileData;
+            fh.filehash = uint256(fileData);
+
+            connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FH, fh));
+        }
+
+
+    }
+    else if (strCommand == NetMsgType::FGET)
+    { //file
+        uint256 hash;
+        uint32_t part_begin;
+        uint32_t part_end;
+        vRecv >> hash >> part_begin >> part_end;
+
+        CFP HFP;
+
+        HFP.hash = hash;
+        HFP.part_begin = part_begin;
+        HFP.part_end = part_end;
+
+        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FGET hash:%s\n", hash.ToString());
+
+        fs::path HeadFile = GetStorageDir() / "files" / hash.ToString();
+        // open temp output file, and associate with CAutoFile
+        const char* c = HeadFile.c_str();
+
+        if(boost::filesystem::exists(c)) {
+
+            // open the file:
+            std::streampos fileSize;
+            std::ifstream file(c, std::ios::binary);
+
+            // get its size:
+            fileSize = HFP.part_end - HFP.part_begin;
+            file.seekg(HFP.part_begin, std::ios::beg);
+
+            // read the data:
+            std::vector<unsigned char> fileData(fileSize);
+            file.read((char*) &fileData[0], fileSize);
+
+            HFP.hash = hash;
+            HFP.part_begin = part_begin;
+            HFP.part_end = part_end;
+            HFP.data = fileData;
+            HFP.filehash = uint256(fileData);
+
+            connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FPART, HFP));
+        }
+
+
     }
 }
 
