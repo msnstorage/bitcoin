@@ -136,7 +136,7 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             fileHeadStatus.status = 0;
         }
 
-        connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::CHKFHEAD, fileHeadStatus));
+        connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FHSTAT, fileHeadStatus));
     }
     else if (strCommand == NetMsgType::FHGET)
     { //file
