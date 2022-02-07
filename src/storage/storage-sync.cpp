@@ -29,8 +29,9 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
 
         uint256 hash;
         uint256 filehash;
+        std::vector<unsigned char> fileData;
+        vRecv >> hash >> filehash >> fileData;
         CHeadFile head;
-        vRecv >> hash >> filehash >> head;
 
         fs::path HeadFile = GetStorageDir() / "headers" / hash.ToString();
         // open temp output file, and associate with CAutoFile
@@ -40,13 +41,14 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
 
             std::ofstream out(c, std::ios::out | std::ios::binary | std::ios::app);
 
-            CDataStream ssHeader(SER_NETWORK, PROTOCOL_VERSION);
-            ssHeader << head;
+            CDataStream stream(fileData, SER_NETWORK, PROTOCOL_VERSION);
 
-            std::string binaryHeader = ssHeader.str();
+            std::string binaryHeader = stream.str();
 
             out << binaryHeader;
             out.close();
+
+            stream >> head;
 
             std::vector<CHeadFilePartL> vheadl;
             for (size_t i = 0; i < head.vhead.size(); i++) {
@@ -81,7 +83,7 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             vRecv >> hash >> filehash >> part_begin >> part_end >> vData;
 
             LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART filehash:%s hash:%s begin:%u end:%u size:%u\n",
-                      filehash.ToString(), hash.ToString(), part_begin, part_end, vData.size());
+                     filehash.ToString(), hash.ToString(), part_begin, part_end, vData.size());
 
             fs::path file = GetStorageDir() / "files" / filehash.ToString();
             // open temp output file, and associate with CAutoFile
@@ -156,7 +158,7 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
 
             // open the file:
             std::streampos fileSize;
-            std::ifstream file(c, std::ios::binary);
+            std::ifstream file(c, std::ios::binary | std::ios::app);
 
             // get its size:
             file.seekg(0, std::ios::end);
@@ -167,14 +169,18 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             std::vector<unsigned char> fileData(fileSize);
             file.read((char*) &fileData[0], fileSize);
 
+            CDataStream stream(fileData, SER_NETWORK, PROTOCOL_VERSION);
+            CHeadFile head;
+            stream >> head;
+
             std::string hash_hex_str;
             picosha2::hash256_hex_string(fileData, hash_hex_str);
 
             fh.hash = hash;
             fh.data = fileData;
-            fh.filehash = uint256S(hash_hex_str);
+            fh.filehash = head.hash;
 
-            LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FHGET hash:%s size:%u\n", fh.hash.ToString(), fh.data.size());
+            LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FHGET hash:%s filehash:%s size:%u\n", fh.hash.ToString(), fh.filehash.ToString(), fh.data.size());
 
             connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FH, fh));
         }
@@ -184,19 +190,21 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
     else if (strCommand == NetMsgType::FGET)
     { //file
         uint256 hash;
+        uint256 filehash;
         uint32_t part_begin;
         uint32_t part_end;
-        vRecv >> hash >> part_begin >> part_end;
+        vRecv >> hash >> part_begin >> part_end >> filehash;
 
         CFP HFP;
 
         HFP.hash = hash;
+        HFP.filehash = filehash;
         HFP.part_begin = part_begin;
         HFP.part_end = part_end;
 
-        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FGET hash:%s\n", hash.ToString());
+        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FGET hash:%s filehash:%s part_begin:%u part_end:%u\n", hash.ToString(), filehash.ToString(), part_begin, part_end);
 
-        fs::path HeadFile = GetStorageDir() / "files" / hash.ToString();
+        fs::path HeadFile = GetStorageDir() / "files" / filehash.ToString();
         // open temp output file, and associate with CAutoFile
         const char* c = HeadFile.c_str();
 
@@ -218,7 +226,6 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             HFP.part_begin = part_begin;
             HFP.part_end = part_end;
             HFP.data = fileData;
-            HFP.filehash = uint256(fileData);
 
             connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FPART, HFP));
         }

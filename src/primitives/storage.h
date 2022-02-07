@@ -189,7 +189,7 @@ public:
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
 
     CHeadFile(): parts(NULL_INDEX) { }
-    CHeadFile(const uint256& hashIn, uint32_t partsIn): hash(hashIn), parts(partsIn) { }
+    CHeadFile(const uint256& hashIn, uint32_t partsIn, std::vector<CHeadFilePart> vheadIn): hash(hashIn), parts(partsIn), vhead(vheadIn) { }
 
     ADD_SERIALIZE_METHODS;
 
@@ -306,7 +306,7 @@ public:
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
 
-    CFP(): data(NULL_INDEX) { }
+    CFP(): hash(uint256S("")) { }
     CFP(const uint256& hashIn, const uint256& filehashIn, uint32_t part_beginIn, uint32_t part_endIn, std::vector<unsigned char> dataIn): hash(hashIn), filehash(filehashIn), part_begin(part_beginIn), part_end(part_endIn), data(dataIn) { }
 
     ADD_SERIALIZE_METHODS;
