@@ -160,6 +160,10 @@ bool IsBlockPayeeValid(const CTransactionRef txNew, int nBlockHeight, CAmount bl
 
 bool IsBlockExist(int nBlockHeight, const std::shared_ptr<const CBlock> pblock)
 {
+    if (Params().GetConsensus().nMasternodePaymentsStartBlock > nBlockHeight) {
+        return true;
+    }
+
     if(!masternodeSync.IsSynced()) {
         //there is no budget data to use to check anything, let's just accept the longest chain
         if(fDebug) LogPrintf("IsBlockPayeeValid -- WARNING: Client not synced, skipping block payee checks\n");
@@ -755,7 +759,7 @@ bool CMasternodePayments::ProcessBlock(int nBlockHeight, CConnman& connman)
 
 void CMasternodePayments::CheckPreviousBlockVotes(int nPrevBlockHeight)
 {
-    if (!masternodeSync.IsWinnersListSynced()) return;
+    if (!masternodeSync.IsWinnersListSynced() || Params().GetConsensus().nMasternodePaymentsStartBlock > nPrevBlockHeight) return;
 
     std::string debugStr;
 

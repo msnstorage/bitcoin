@@ -618,7 +618,7 @@ bool CMasternodeMan::GetMasternodeRank(const COutPoint& outpoint, int& nRankRet,
 {
     nRankRet = -1;
 
-    if (!masternodeSync.IsMasternodeListSynced())
+    if (!masternodeSync.IsMasternodeListSynced() || Params().GetConsensus().nMasternodePaymentsStartBlock > nBlockHeight)
         return false;
 
     // make sure we know about this block
