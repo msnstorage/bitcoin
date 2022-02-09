@@ -22,6 +22,7 @@ class CStorageSync
 private:
     std::map<uint256, int64_t> mapStorageHeaders;
     std::map<uint256, std::vector<CHeadFilePartL>> mapFilesPartsForDownoads;
+    std::map<std::pair<uint256, CNode*>, bool> mapNodesFiles;
 public:
     void ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStream& vRecv, CConnman& connman);
     void ProcessTick(CConnman& connman);

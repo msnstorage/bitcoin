@@ -66,6 +66,9 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
                 mapFilesPartsForDownoads.insert(std::make_pair(filehash, vheadl));
 
                 mapStorageHeaders.erase(hash);
+
+                connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::CHKF, filehash)); //get storage headers
+
             } else {
                 mapStorageHeaders.erase(hash);
             }
@@ -115,6 +118,7 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
                     if (mapFilesPartsForDownoads[filePartL.filehash].empty()) {
                         mapFilesPartsForDownoads.erase(filePartL.filehash);
                         LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART all part downloaded successfully filehash:%s\n", filePartL.filehash.ToString());
+                        mapNodesFiles.erase(std::make_pair(filePartL.filehash, pfrom));
                     }
                 } else {
                     LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART not found filehash:%s\n", filePartL.filehash.ToString());
@@ -237,6 +241,39 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
         }
 
     }
+    else if (strCommand == NetMsgType::FSTAT)
+    {//file head status
+            uint256 hash;
+            uint32_t status;
+            vRecv >> hash >> status;
+            if (status == 1) {
+                mapNodesFiles[std::make_pair(hash, pfrom)] = status;
+            }
+            LogPrint(BCLog::STORAGE, "CStorageSync::ProcessMessage FSTAT -- hash=%s status=%u peer=%d\n", hash.ToString(), status, pfrom->GetId());
+    }
+    else if (strCommand == NetMsgType::CHKF)
+    { //file
+        uint256 hash;
+        vRecv >> hash;
+
+        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- CHKF hash:%s\n", hash.ToString());
+
+        CHeadFileStatus fileHeadStatus;
+        fileHeadStatus.hash = hash;
+        fileHeadStatus.status = 0;
+
+        fs::path HeadFile = GetStorageDir() / "files" / hash.ToString();
+        // open temp output file, and associate with CAutoFile
+        const char* c = HeadFile.c_str();
+
+        if(boost::filesystem::exists(c)) {
+            fileHeadStatus.status = 1;
+        } else {
+            fileHeadStatus.status = 0;
+        }
+
+        connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FSTAT, fileHeadStatus));
+    }
 }
 
 void CStorageSync::ProcessTick(CConnman& connman)
@@ -272,9 +309,11 @@ void CStorageSync::ProcessTick(CConnman& connman)
                 fhp.part_end = it->second[i].part_end;
                 if(!fhp.loaded && fhp.lasttime + 30 < GetTime()) {
                     it->second[i].lasttime = GetTime();
-                    connman.ForEachNode(CConnman::AllNodes, [&connman, &fhp](CNode* pnode) {
-                        connman.PushMessage(pnode, CNetMsgMaker(pnode->GetSendVersion()).Make(NetMsgType::FGET, fhp)); //get storage file
-                    });
+                    for(std::map<std::pair<uint256, CNode*>, bool>::iterator it1 = mapNodesFiles.begin(); it1 != mapNodesFiles.end(); ++it1) {
+                        if(it->first == it1->first.first && it1->second) {
+                            connman.PushMessage(it1->first.second, CNetMsgMaker(it1->first.second->GetSendVersion()).Make(NetMsgType::FGET, fhp)); //get storage file
+                        }
+                    };
                     MilliSleep(100);
                 }
             }
