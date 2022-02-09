@@ -6,7 +6,6 @@
 
 #include <netmessagemaker.h>
 #include <util/system.h>
-#include "picosha2.h"
 
 class CStorageSync;
 CStorageSync storageSync;
@@ -37,39 +36,42 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
         // open temp output file, and associate with CAutoFile
         const char* c = HeadFile.c_str();
 
-        if(!boost::filesystem::exists(c)) {
+        CDataStream stream(fileData, SER_GETHASH, PROTOCOL_VERSION);
+        uint256 tmphash = SerializeHash(stream);
 
-            std::ofstream out(c, std::ios::out | std::ios::binary | std::ios::app);
+        if (hash == tmphash) {
+            if(!boost::filesystem::exists(c)) {
 
-            CDataStream stream(fileData, SER_NETWORK, PROTOCOL_VERSION);
+                std::ofstream out(c, std::ios::out | std::ios::binary | std::ios::app);
 
-            std::string binaryHeader = stream.str();
+                std::string binaryHeader = stream.str();
 
-            out << binaryHeader;
-            out.close();
+                out << binaryHeader;
+                out.close();
 
-            stream >> head;
+                stream >> head;
 
-            std::vector<CHeadFilePartL> vheadl;
-            for (size_t i = 0; i < head.vhead.size(); i++) {
-                CHeadFilePartL fhp;
-                fhp.hash = head.vhead[i].hash;
-                fhp.part_begin = head.vhead[i].part_begin;
-                fhp.part_end = head.vhead[i].part_end;
-                fhp.loaded = false;
-                fhp.lasttime = 0;
-                fhp.filehash = filehash;
-                vheadl.push_back(fhp);
+                std::vector<CHeadFilePartL> vheadl;
+                for (size_t i = 0; i < head.vhead.size(); i++) {
+                    CHeadFilePartL fhp;
+                    fhp.hash = head.vhead[i].hash;
+                    fhp.part_begin = head.vhead[i].part_begin;
+                    fhp.part_end = head.vhead[i].part_end;
+                    fhp.loaded = false;
+                    fhp.lasttime = 0;
+                    fhp.filehash = filehash;
+                    vheadl.push_back(fhp);
+                }
+
+                mapFilesPartsForDownoads.insert(std::make_pair(filehash, vheadl));
+
+                mapStorageHeaders.erase(hash);
+            } else {
+                mapStorageHeaders.erase(hash);
             }
-
-            mapFilesPartsForDownoads.insert(std::make_pair(filehash, vheadl));
-
-            mapStorageHeaders.erase(hash);
         } else {
-            mapStorageHeaders.erase(hash);
+            LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FH error calc expected hash:%s calculate hash:%s\n", hash.ToString(), tmphash.ToString());
         }
-
-        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessMessage FH -- hash=%s parts=%u peer=%d\n", filehash.ToString(), head.parts, pfrom->GetId());
     }
     else if (strCommand == NetMsgType::FPART)
     { //file
@@ -89,29 +91,36 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             // open temp output file, and associate with CAutoFile
             const char* c = file.c_str();
 
-            std::ofstream out(c, std::ios::out | std::ios::binary | std::ios::app);
-            out.seekp(part_begin, std::ios::beg);
-            out.write((const char*)&vData[0], vData.size());
-            out.close();
+            CDataStream stream(vData, SER_GETHASH, PROTOCOL_VERSION);
+            uint256 tmphash = SerializeHash(stream);
 
-            CHeadFilePartL filePartL;
-            filePartL.hash = hash;
-            filePartL.filehash = filehash;
-            filePartL.part_begin = part_begin;
-            filePartL.part_end = part_end;
+            if (hash == tmphash) {
+                std::ofstream out(c, std::ios::out | std::ios::binary | std::ios::app);
+                out.seekp(part_begin, std::ios::beg);
+                out.write((const char*)&vData[0], vData.size());
+                out.close();
 
-            if(mapFilesPartsForDownoads.count(filePartL.filehash)) {
-                std::vector<CHeadFilePartL>::iterator it = std::find(mapFilesPartsForDownoads[filehash].begin(), mapFilesPartsForDownoads[filehash].end(), filePartL);
-                LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART downloaded successfully hash:%s size=%u del:%s\n", filePartL.hash.ToString(), mapFilesPartsForDownoads[filePartL.filehash].size(), it->hash.ToString());
-                int index = std::distance(mapFilesPartsForDownoads[filehash].begin(), it);
-                mapFilesPartsForDownoads[filePartL.filehash].erase(mapFilesPartsForDownoads[filePartL.filehash].begin() + index);
-                //vec.erase(find(vec.begin(),vec.end(),value));
-                if (mapFilesPartsForDownoads[filePartL.filehash].empty()) {
-                    mapFilesPartsForDownoads.erase(filePartL.filehash);
-                    LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART all part downloaded successfully filehash:%s\n", filePartL.filehash.ToString());
+                CHeadFilePartL filePartL;
+                filePartL.hash = hash;
+                filePartL.filehash = filehash;
+                filePartL.part_begin = part_begin;
+                filePartL.part_end = part_end;
+
+                if(mapFilesPartsForDownoads.count(filePartL.filehash)) {
+                    std::vector<CHeadFilePartL>::iterator it = std::find(mapFilesPartsForDownoads[filehash].begin(), mapFilesPartsForDownoads[filehash].end(), filePartL);
+                    LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART downloaded successfully hash:%s size=%u del:%s\n", filePartL.hash.ToString(), mapFilesPartsForDownoads[filePartL.filehash].size(), it->hash.ToString());
+                    int index = std::distance(mapFilesPartsForDownoads[filehash].begin(), it);
+                    mapFilesPartsForDownoads[filePartL.filehash].erase(mapFilesPartsForDownoads[filePartL.filehash].begin() + index);
+                    //vec.erase(find(vec.begin(),vec.end(),value));
+                    if (mapFilesPartsForDownoads[filePartL.filehash].empty()) {
+                        mapFilesPartsForDownoads.erase(filePartL.filehash);
+                        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART all part downloaded successfully filehash:%s\n", filePartL.filehash.ToString());
+                    }
+                } else {
+                    LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART not found filehash:%s\n", filePartL.filehash.ToString());
                 }
             } else {
-                LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART not found filehash:%s\n", filePartL.filehash.ToString());
+                LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART error calc expected hash:%s calculate hash:%s\n", hash.ToString(), tmphash.ToString());
             }
         } catch (const std::exception& e) {
             LogPrint(BCLog::STORAGE, "ERROR Exception '%s' \n", e.what());
@@ -173,9 +182,6 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             CHeadFile head;
             stream >> head;
 
-            std::string hash_hex_str;
-            picosha2::hash256_hex_string(fileData, hash_hex_str);
-
             fh.hash = hash;
             fh.data = fileData;
             fh.filehash = head.hash;
@@ -229,7 +235,6 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
 
             connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FPART, HFP));
         }
-
 
     }
 }

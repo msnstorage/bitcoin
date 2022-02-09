@@ -251,6 +251,8 @@ extern const char *MNGOVERNANCEOBJECT;
 extern const char *MNGOVERNANCEOBJECTVOTE;
 extern const char *MNVERIFY;
 extern const char *CHKFHEAD;
+extern const char *CHKF;
+extern const char *FSTAT;
 extern const char *FHSTAT;
 extern const char *FHGET;
 extern const char *FH;

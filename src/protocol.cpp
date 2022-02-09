@@ -55,6 +55,8 @@ const char *MNGOVERNANCEOBJECT="govobj";
 const char *MNGOVERNANCEOBJECTVOTE="govobjvote";
 const char *MNVERIFY="mnv";
 const char *CHKFHEAD="chkfhead";
+const char *CHKF="chkf";
+const char *FSTAT="fstat";
 const char *FHSTAT="fhstat";
 const char *FHGET="fhget";
 const char *FH="fh";
@@ -105,6 +107,8 @@ const static std::string allNetMessageTypes[] = {
     NetMsgType::MNGOVERNANCEOBJECTVOTE,
     NetMsgType::MNVERIFY,
     NetMsgType::CHKFHEAD,
+    NetMsgType::CHKF,
+    NetMsgType::FSTAT,
     NetMsgType::FHSTAT,
     NetMsgType::FHGET,
     NetMsgType::FH,
