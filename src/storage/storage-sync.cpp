@@ -14,7 +14,6 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
 {
     if (strCommand == NetMsgType::FHSTAT)
     { //file head status
-
         uint256 hash;
         uint32_t status;
         vRecv >> hash >> status;
@@ -25,7 +24,6 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
     }
     else if (strCommand == NetMsgType::FH)
     { //file head
-
         uint256 hash;
         uint256 filehash;
         std::vector<unsigned char> fileData;
@@ -36,20 +34,18 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
         // open temp output file, and associate with CAutoFile
         const char* c = HeadFile.c_str();
 
-        CDataStream stream(fileData, SER_GETHASH, PROTOCOL_VERSION);
-        uint256 tmphash = SerializeHash(stream);
+        CDataStream ssObj(fileData, SER_GETHASH, PROTOCOL_VERSION);
+        // verify stored checksum matches input data
+        uint256 hashTmp = Hash(ssObj.begin(), ssObj.end());
 
-        if (hash == tmphash) {
+        if (hash == hashTmp) {
             if(!boost::filesystem::exists(c)) {
 
                 std::ofstream out(c, std::ios::out | std::ios::binary | std::ios::app);
-
-                std::string binaryHeader = stream.str();
-
-                out << binaryHeader;
+                out.write((const char*)&fileData[0], fileData.size());
                 out.close();
 
-                stream >> head;
+                ssObj >> head;
 
                 std::vector<CHeadFilePartL> vheadl;
                 for (size_t i = 0; i < head.vhead.size(); i++) {
@@ -73,7 +69,7 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
                 mapStorageHeaders.erase(hash);
             }
         } else {
-            LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FH error calc expected hash:%s calculate hash:%s\n", hash.ToString(), tmphash.ToString());
+            LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FH error calc expected hash:%s calculate hash:%s\n", hash.ToString(), hashTmp.ToString());
         }
     }
     else if (strCommand == NetMsgType::FPART)
@@ -83,24 +79,25 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             uint256 filehash;
             uint32_t part_begin;
             uint32_t part_end;
-            std::vector<unsigned char> vData;
+            std::vector<unsigned char> fileData;
 
-            vRecv >> hash >> filehash >> part_begin >> part_end >> vData;
+            vRecv >> hash >> filehash >> part_begin >> part_end >> fileData;
 
             LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART filehash:%s hash:%s begin:%u end:%u size:%u\n",
-                     filehash.ToString(), hash.ToString(), part_begin, part_end, vData.size());
+                     filehash.ToString(), hash.ToString(), part_begin, part_end, fileData.size());
 
             fs::path file = GetStorageDir() / "files" / filehash.ToString();
             // open temp output file, and associate with CAutoFile
             const char* c = file.c_str();
 
-            CDataStream stream(vData, SER_GETHASH, PROTOCOL_VERSION);
-            uint256 tmphash = SerializeHash(stream);
+            CDataStream ssObj(fileData, SER_GETHASH, PROTOCOL_VERSION);
+            // verify stored checksum matches input data
+            uint256 hashTmp = Hash(ssObj.begin(), ssObj.end());
 
-            if (hash == tmphash) {
+            if (hash == hashTmp) {
                 std::ofstream out(c, std::ios::out | std::ios::binary | std::ios::app);
                 out.seekp(part_begin, std::ios::beg);
-                out.write((const char*)&vData[0], vData.size());
+                out.write((const char*)&fileData[0], fileData.size());
                 out.close();
 
                 CHeadFilePartL filePartL;
@@ -124,7 +121,7 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
                     LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART not found filehash:%s\n", filePartL.filehash.ToString());
                 }
             } else {
-                LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART error calc expected hash:%s calculate hash:%s\n", hash.ToString(), tmphash.ToString());
+                LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART error calc expected hash:%s calculate hash:%s\n", hash.ToString(), hashTmp.ToString());
             }
         } catch (const std::exception& e) {
             LogPrint(BCLog::STORAGE, "ERROR Exception '%s' \n", e.what());
@@ -182,9 +179,10 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             std::vector<unsigned char> fileData(fileSize);
             file.read((char*) &fileData[0], fileSize);
 
-            CDataStream stream(fileData, SER_NETWORK, PROTOCOL_VERSION);
+            CDataStream ssObj(fileData, SER_GETHASH, PROTOCOL_VERSION);
+
             CHeadFile head;
-            stream >> head;
+            ssObj >> head;
 
             fh.hash = hash;
             fh.data = fileData;
@@ -194,8 +192,6 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
 
             connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FH, fh));
         }
-
-
     }
     else if (strCommand == NetMsgType::FGET)
     { //file
@@ -232,6 +228,14 @@ void CStorageSync::ProcessMessage(CNode* pfrom, const std::string& strCommand, C
             std::vector<unsigned char> fileData(fileSize);
             file.read((char*) &fileData[0], fileSize);
 
+            CDataStream ssObj(fileData, SER_GETHASH, PROTOCOL_VERSION);
+            // verify stored checksum matches input data
+            uint256 hashTmp = Hash(ssObj.begin(), ssObj.end());
+            if (hash == hashTmp) {
+                LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FGET OK expected hash:%s calculate hash:%s\n", hash.ToString(), hashTmp.ToString());
+            } else {
+                LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FGET ERROR expected hash:%s calculate hash:%s\n", hash.ToString(), hashTmp.ToString());
+            }
             HFP.hash = hash;
             HFP.part_begin = part_begin;
             HFP.part_end = part_end;
