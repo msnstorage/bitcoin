@@ -780,8 +780,6 @@ const fs::path &GetStorageDir()
     path /= BaseParams().DataDir();
     path /= "storage";
     fs::create_directories(path);
-    fs::create_directories(path / "headers");
-    fs::create_directories(path / "files");
     return path;
 }
 

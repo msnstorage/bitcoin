@@ -9,7 +9,7 @@
 
 #include <init.h>
 
-#include <activemasternode.h>
+#include <masternode/activemasternode.h>
 #include <addrman.h>
 #include <amount.h>
 #include <banman.h>
@@ -18,10 +18,10 @@
 #include <checkpoints.h>
 #include <compat/sanity.h>
 #include <consensus/validation.h>
-#include <dsnotificationinterface.h>
-#include <flat-database.h>
+#include <masternode/util/dsnotificationinterface.h>
+#include <masternode/util/flat-database.h>
 #include <fs.h>
-#include <governance.h>
+#include <governance/governance.h>
 #include <httpserver.h>
 #include <httprpc.h>
 #include <interfaces/chain.h>
@@ -31,13 +31,13 @@
 #include <validation.h>
 #include <miner.h>
 #include <netbase.h>
-#include <masternode-payments.h>
-#include <masternode-sync.h>
-#include <masternodeman.h>
-#include <masternodeconfig.h>
-#include <messagesigner.h>
+#include <masternode/masternode-payments.h>
+#include <masternode/masternode-sync.h>
+#include <masternode/masternodeman.h>
+#include <masternode/masternodeconfig.h>
+#include <masternode/util/messagesigner.h>
 #include <net.h>
-#include <netfulfilledman.h>
+#include <masternode/util/netfulfilledman.h>
 #include <net_processing.h>
 #include <policy/feerate.h>
 #include <policy/fees.h>
@@ -62,8 +62,11 @@
 #include <walletinitinterface.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <spork.h>
-#include <sporkdb.h>
+#include <masternode/util/spork.h>
+#include <masternode/util/sporkdb.h>
+#include <storage/storageman.h>
+#include <storage/storage.h>
+#include <storage/storagedb.h>
 
 #ifdef ENABLE_WALLET
 #include <wallet/wallet.h>
@@ -304,6 +307,9 @@ void Shutdown(InitInterfaces& interfaces)
         pcoinsdbview.reset();
         pblocktree.reset();
         pSporkDB.reset();
+        pStorageHeadersDB.reset();
+        pStorageHeadersFilesDB.reset();
+        pStorageFilesPartsDB.reset();
     }
     for (const auto& client : interfaces.chain_clients) {
         client->stop();
@@ -1537,7 +1543,12 @@ bool AppInitMain(InitInterfaces& interfaces)
                 pblocktree.reset(new CBlockTreeDB(nBlockTreeDBCache, false, fReset));
                 pSporkDB.reset();
                 pSporkDB.reset(new CSporkDB(0, false, false));
-
+                pStorageHeadersDB.reset();
+                pStorageHeadersDB.reset(new CStorageHeadersDB(0, false, false));
+                pStorageHeadersFilesDB.reset();
+                pStorageHeadersFilesDB.reset(new CStorageHeadersFilesDB(0, false, false));
+                pStorageFilesPartsDB.reset();
+                pStorageFilesPartsDB.reset(new CStorageFilesPartsDB(0, false, false));
                 if (fReset) {
                     pblocktree->WriteReindexing(true);
                     //If we're reindexing in prune mode, wipe away unusable block files and all undo data files
@@ -1547,6 +1558,12 @@ bool AppInitMain(InitInterfaces& interfaces)
 
                 uiInterface.InitMessage(_("Loading sporks..."));
                 sporkManager.LoadSporksFromDB();
+                uiInterface.InitMessage(_("Loading storages headers..."));
+                storageman.LoadHeaders();
+                uiInterface.InitMessage(_("Loading storages headers files..."));
+                storageman.LoadHeadersFiles();
+                uiInterface.InitMessage(_("Loading storages files parts..."));
+                storageman.LoadFilesParts();
                 uiInterface.InitMessage(_("Loading block index..."));
 
                 if (ShutdownRequested()) break;
@@ -1889,6 +1906,7 @@ bool AppInitMain(InitInterfaces& interfaces)
 
     if (!fLiteMode) {
         threadGroup.create_thread(boost::bind(&ThreadCheckMasternode, boost::ref(*g_connman)));
+        threadGroup.create_thread(boost::bind(&ThreadCheckStorage, boost::ref(*g_connman)));
     }
 
     // ********************************************************* Step 12: start node

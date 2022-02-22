@@ -230,30 +230,31 @@ BITCOIN_CORE_H = \
 
 # bitcoin core #
 BITCOIN_CORE_H += \
-  activemasternode.h \
-  cachemap.h \
-  cachemultimap.h \
-  dsnotificationinterface.h \
-  flat-database.h \
-  governance.h \
-  governance-classes.h \
-  governance-exceptions.h \
-  governance-misc.h \
-  governance-object.h \
-  governance-validators.h \
-  governance-vote.h \
-  governance-votedb.h \
-  masternode.h \
-  masternodeman.h \
-  masternode-payments.h \
-  masternode-sync.h \
-  masternodeconfig.h \
-  messagesigner.h \
-  netfulfilledman.h \
-  spork.h \
-  sporkdb.h \
-  primitives/storage.h \
-  storage/storage-sync.h
+  masternode/activemasternode.h \
+  masternode/util/cachemap.h \
+  masternode/util/cachemultimap.h \
+  masternode/util/dsnotificationinterface.h \
+  masternode/util/flat-database.h \
+  governance/governance.h \
+  governance/governance-classes.h \
+  governance/governance-exceptions.h \
+  governance/governance-misc.h \
+  governance/governance-object.h \
+  governance/governance-validators.h \
+  governance/governance-vote.h \
+  governance/governance-votedb.h \
+  masternode/masternode.h \
+  masternode/masternodeman.h \
+  masternode/masternode-payments.h \
+  masternode/masternode-sync.h \
+  masternode/masternodeconfig.h \
+  masternode/util/messagesigner.h \
+  masternode/util/netfulfilledman.h \
+  masternode/util/spork.h \
+  masternode/util/sporkdb.h \
+  storage/storageman.h \
+  storage/storage.h \
+  storage/storagedb.h
 
 obj/build.h: FORCE
 	@$(MKDIR_P) $(builddir)/obj
@@ -316,26 +317,27 @@ libbitcoin_server_a_SOURCES = \
 
 # bitcoin server
 libbitcoin_server_a_SOURCES += \
-  activemasternode.cpp \
-  dsnotificationinterface.cpp \
-  governance.cpp \
-  governance-classes.cpp \
-  governance-object.cpp \
-  governance-validators.cpp \
-  governance-vote.cpp \
-  governance-votedb.cpp \
-  masternode.cpp \
-  masternodeman.cpp \
-  masternode-payments.cpp \
-  masternode-sync.cpp \
-  masternodeconfig.cpp \
-  messagesigner.cpp \
-  netfulfilledman.cpp \
+  masternode/activemasternode.cpp \
+  masternode/util/dsnotificationinterface.cpp \
+  governance/governance.cpp \
+  governance/governance-classes.cpp \
+  governance/governance-object.cpp \
+  governance/governance-validators.cpp \
+  governance/governance-vote.cpp \
+  governance/governance-votedb.cpp \
+  masternode/masternode.cpp \
+  masternode/masternodeman.cpp \
+  masternode/masternode-payments.cpp \
+  masternode/masternode-sync.cpp \
+  masternode/masternodeconfig.cpp \
+  masternode/util/messagesigner.cpp \
+  masternode/util/netfulfilledman.cpp \
   rpc/governance.cpp \
   rpc/masternode.cpp \
-  spork.cpp \
-  sporkdb.cpp \
-  storage/storage-sync.cpp
+  masternode/util/spork.cpp \
+  masternode/util/sporkdb.cpp \
+  storage/storageman.cpp \
+  storage/storagedb.cpp
 #
 
 if !ENABLE_WALLET

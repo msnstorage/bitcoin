@@ -4,20 +4,20 @@
 
 //#define ENABLE_DASH_DEBUG
 
-#include <activemasternode.h>
+#include <masternode/activemasternode.h>
 #include <consensus/validation.h>
 #include <core_io.h>
-#include <governance.h>
-#include <governance-vote.h>
-#include <governance-classes.h>
-#include <governance-validators.h>
+#include <governance/governance.h>
+#include <governance/governance-vote.h>
+#include <governance/governance-classes.h>
+#include <governance/governance-validators.h>
 #include <init.h>
 #include <validation.h>
-#include <masternode.h>
-#include <masternode-sync.h>
-#include <masternodeconfig.h>
-#include <masternodeman.h>
-#include <messagesigner.h>
+#include <masternode/masternode.h>
+#include <masternode/masternode-sync.h>
+#include <masternode/masternodeconfig.h>
+#include <masternode/masternodeman.h>
+#include <masternode/util/messagesigner.h>
 #include <primitives/block.h>
 #include <rpc/util.h>
 #include <rpc/server.h>

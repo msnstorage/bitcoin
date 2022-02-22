@@ -18,9 +18,10 @@
 #include <hash.h>
 #include <index/txindex.h>
 #include <key_io.h>
-#include <masternodeman.h>
-#include <masternode-sync.h>
-#include <masternode-payments.h>
+#include <masternode/masternodeman.h>
+#include <masternode/masternode-sync.h>
+#include <masternode/masternode-payments.h>
+#include <storage/storageman.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
 #include <policy/rbf.h>
@@ -32,7 +33,6 @@
 #include <script/script.h>
 #include <script/sigcache.h>
 #include <script/standard.h>
-#include <storage/storage-sync.h>
 #include <shutdown.h>
 #include <timedata.h>
 #include <tinyformat.h>
@@ -1005,7 +1005,7 @@ static bool AcceptToMemoryPoolWorker(const CChainParams& chainparams, CTxMemPool
         }
     }
 
-    storageSync.ProcessHeaders(tx);
+    storageman.ProcesseTxStorage(tx);
 
     GetMainSignals().TransactionAddedToMempool(ptx);
 
@@ -2122,7 +2122,7 @@ bool CChainState::ConnectBlock(const CBlock& block, CValidationState& state, CBl
         }
         UpdateCoins(tx, view, i == 0 ? undoDummy : blockundo.vtxundo.back(), pindex->nHeight);
 
-        storageSync.ProcessHeaders(tx);
+        storageman.ProcesseTxStorage(tx);
 
     }
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;

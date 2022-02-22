@@ -16,8 +16,8 @@
 #include <crypto/common.h>
 #include <crypto/sha256.h>
 #include <primitives/transaction.h>
-#include <masternode-sync.h>
-#include <masternodeman.h>
+#include <masternode/masternode-sync.h>
+#include <masternode/masternodeman.h>
 #include <netbase.h>
 #include <netmessagemaker.h>
 #include <scheduler.h>

@@ -10,7 +10,7 @@
 #include <key_io.h>
 #include <validation.h>
 #include <httpserver.h>
-#include <masternode-sync.h>
+#include <masternode/masternode-sync.h>
 #include <net.h>
 #include <netbase.h>
 #include <outputtype.h>
@@ -18,7 +18,7 @@
 #include <rpc/server.h>
 #include <rpc/util.h>
 #include <script/descriptor.h>
-#include <spork.h>
+#include <masternode/util/spork.h>
 #include <timedata.h>
 #include <util/system.h>
 #include <util/strencodings.h>

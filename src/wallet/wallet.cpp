@@ -7,7 +7,7 @@
 
 #include <checkpoints.h>
 #include <chain.h>
-#include <governance.h>
+#include <governance/governance.h>
 #include <wallet/coincontrol.h>
 #include <consensus/consensus.h>
 #include <consensus/validation.h>
@@ -17,7 +17,7 @@
 #include <key_io.h>
 #include <keystore.h>
 #include <validation.h>
-#include <masternode.h>
+#include <masternode/masternode.h>
 #include <net.h>
 #include <policy/fees.h>
 #include <policy/policy.h>
@@ -26,7 +26,7 @@
 #include <primitives/transaction.h>
 #include <script/descriptor.h>
 #include <script/script.h>
-#include <spork.h>
+#include <masternode/util/spork.h>
 #include <shutdown.h>
 #include <timedata.h>
 #include <txmempool.h>

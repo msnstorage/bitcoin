@@ -10,7 +10,7 @@
 #include <amount.h>
 #include <script/script.h>
 #include <serialize.h>
-#include <primitives/storage.h>
+#include <storage/storage.h>
 #include <uint256.h>
 
 static const int SERIALIZE_TRANSACTION_NO_WITNESS = 0x40000000;

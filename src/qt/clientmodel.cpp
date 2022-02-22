@@ -16,8 +16,8 @@
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
 #include <validation.h>
-#include <masternodeman.h>
-#include <masternode-sync.h>
+#include <masternode/masternodeman.h>
+#include <masternode/masternode-sync.h>
 #include <net.h>
 #include <netbase.h>
 #include <txmempool.h>

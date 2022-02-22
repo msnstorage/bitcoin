@@ -29,7 +29,7 @@
 
 #include <interfaces/handler.h>
 #include <interfaces/node.h>
-#include <masternodeconfig.h>
+#include <masternode/masternodeconfig.h>
 #include <noui.h>
 #include <rpc/server.h>
 #include <ui_interface.h>

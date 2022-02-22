@@ -11,12 +11,12 @@
 #include <blockencodings.h>
 #include <chainparams.h>
 #include <consensus/validation.h>
-#include <governance.h>
+#include <governance/governance.h>
 #include <hash.h>
 #include <validation.h>
-#include <masternode-payments.h>
-#include <masternode-sync.h>
-#include <masternodeman.h>
+#include <masternode/masternode-payments.h>
+#include <masternode/masternode-sync.h>
+#include <masternode/masternodeman.h>
 #include <merkleblock.h>
 #include <netmessagemaker.h>
 #include <netbase.h>
@@ -29,8 +29,8 @@
 #include <scheduler.h>
 #include <tinyformat.h>
 #include <txmempool.h>
-#include <spork.h>
-#include <storage/storage-sync.h>
+#include <masternode/util/spork.h>
+#include <storage/storageman.h>
 #include <ui_interface.h>
 #include <util/system.h>
 #include <util/moneystr.h>
@@ -3158,7 +3158,7 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             sporkManager.ProcessSpork(pfrom, strCommand, vRecv, *connman);
             masternodeSync.ProcessMessage(pfrom, strCommand, vRecv);
             governance.ProcessMessage(pfrom, strCommand, vRecv, *connman);
-            storageSync.ProcessMessage(pfrom, strCommand, vRecv, *connman);
+            storageman.ProcessMessage(pfrom, strCommand, vRecv, *connman);
 
             return true;
         }

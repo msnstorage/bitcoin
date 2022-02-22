@@ -14,7 +14,7 @@
 #include <interfaces/chain.h>
 #include <rpc/server.h>
 #include <init.h>
-#include <masternodeconfig.h>
+#include <masternode/masternodeconfig.h>
 #include <noui.h>
 #include <shutdown.h>
 #include <util/system.h>

@@ -15,8 +15,8 @@
 #include <consensus/validation.h>
 #include <hash.h>
 #include <key_io.h>
-#include <masternode-payments.h>
-#include <masternode-sync.h>
+#include <masternode/masternode-payments.h>
+#include <masternode/masternode-sync.h>
 #include <net.h>
 #include <policy/feerate.h>
 #include <policy/policy.h>

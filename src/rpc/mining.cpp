@@ -10,10 +10,10 @@
 #include <consensus/params.h>
 #include <consensus/validation.h>
 #include <core_io.h>
-#include <governance-classes.h>
+#include <governance/governance-classes.h>
 #include <key_io.h>
-#include <masternode-payments.h>
-#include <masternode-sync.h>
+#include <masternode/masternode-payments.h>
+#include <masternode/masternode-sync.h>
 #include <miner.h>
 #include <net.h>
 #include <policy/fees.h>
