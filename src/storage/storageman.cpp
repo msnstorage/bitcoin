@@ -192,7 +192,7 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
         if (status == 1) {
             connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FHGET, hash)); //get storage headers
         }
-        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessMessage FHSTAT -- hash=%s status=%u peer=%d\n", hash.ToString(), status, pfrom->GetId());
+        LogPrint(BCLog::STORAGE, "CStorageMan::FHSTAT -- hash=%s status=%u peer=%d\n", hash.ToString(), status, pfrom->GetId());
     }
     else if (strCommand == NetMsgType::FH)
     { //file head
@@ -218,7 +218,7 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
                         pStorageHeadersDB->WriteHead(hash, pair.first, pair.second);
                         mapHeaders[hash] = pair;
 
-                        LogPrintf("CStorageMan::TEST hash=%s size=%i status=%d\n", pair.first.hash.ToString(), pair.first.size, pair.second);
+                        LogPrintf("CStorageMan::FH hash=%s size=%i status=%d\n", pair.first.hash.ToString(), pair.first.size, pair.second);
 
                         std::pair<std::vector<unsigned char>, bool> data;
                         for (size_t i = 0; i < head.vhead.size(); i++) {
@@ -240,7 +240,7 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
 
         vRecv >> hash >> filehash >> part_begin >> part_end >> fileData;
 
-        LogPrint(BCLog::STORAGE, "CStorageSync::ProcessTick -- FPART filehash:%s hash:%s begin:%u end:%u size:%u\n",
+        LogPrint(BCLog::STORAGE, "CStorageMan::FPART filehash:%s hash:%s begin:%u end:%u size:%u\n",
                  filehash.ToString(), hash.ToString(), part_begin, part_end, fileData.size());
 
         CDataStream ssObj(fileData, SER_GETHASH, PROTOCOL_VERSION);
@@ -265,18 +265,81 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
     }
     else if (strCommand == NetMsgType::CHKFHEAD)
     { //file
+        uint256 hash;
+        vRecv >> hash;
+
+        LogPrint(BCLog::STORAGE, "CStorageMan::CHKFHEAD hash:%s\n", hash.ToString());
+
+        CHeadFileStatus fileHeadStatus;
+        fileHeadStatus.hash = hash;
+        fileHeadStatus.status = 0;
+
+        if (pStorageHeadersDB->HeadExists(hash)) {
+            fileHeadStatus.status = 1;
+        }
+
+        connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FHSTAT, fileHeadStatus));
+
     }
     else if (strCommand == NetMsgType::FHGET)
     { //file
+        uint256 hash;
+        vRecv >> hash;
+
+        LogPrint(BCLog::STORAGE, "CStorageMan::FHGET hash:%s\n", hash.ToString());
+
+        if (pStorageHeadersFilesDB->HeadFilesExists(hash)) {
+            std::pair<CHeadFile, bool> pair;
+            if (pStorageHeadersFilesDB->ReadHeadFiles(hash, pair)) {
+                connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FH, pair.first));
+            }
+        }
     }
     else if (strCommand == NetMsgType::FGET)
     { //file
+        uint256 hash;
+        uint256 filehash;
+        uint32_t part_begin;
+        uint32_t part_end;
+        vRecv >> hash >> part_begin >> part_end >> filehash;
+
+        LogPrint(BCLog::STORAGE, "CStorageMan::FGET hash:%s filehash:%s part_begin:%u part_end:%u\n"
+                 , hash.ToString(), filehash.ToString(), part_begin, part_end);
+
+
+        if (pStorageFilesPartsDB->FilesPartsExists(std::make_pair(hash, filehash))) {
+            std::pair<std::vector<unsigned char>, bool> data;
+            pStorageFilesPartsDB->ReadFilesParts(std::make_pair(hash, filehash), data);
+            CFP HFP;
+            HFP.hash = hash;
+            HFP.filehash = filehash;
+            HFP.part_begin = part_begin;
+            HFP.part_end = part_end;
+            HFP.data = data.first;
+            connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FPART, HFP));
+        }
+
     }
     else if (strCommand == NetMsgType::FSTAT)
     {//file head status
+        uint256 hash;
+        uint32_t status;
+        vRecv >> hash >> status;
+
+        LogPrint(BCLog::STORAGE, "CStorageMan::FSTAT -- hash=%s status=%u peer=%d\n", hash.ToString(), status, pfrom->GetId());
     }
     else if (strCommand == NetMsgType::CHKF)
     { //file
+        uint256 hash;
+        vRecv >> hash;
+
+        LogPrint(BCLog::STORAGE, "CStorageMan::CHKF hash:%s\n", hash.ToString());
+
+        CHeadFileStatus fileHeadStatus;
+        fileHeadStatus.hash = hash;
+        fileHeadStatus.status = 0;
+
+        connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FSTAT, fileHeadStatus));
     }
 
 }
