@@ -32,9 +32,9 @@ private:
     // critical section to protect the inner data structures
     mutable CCriticalSection cs;
     // map to hold all MNs
-    std::map<uint256, std::pair<CStorageHead , bool>> mapHeaders;
+    std::map<std::pair<uint256, uint256>, std::pair<CStorageHead , bool>> mapHeaders;
     std::map<uint256, std::pair<CHeadFile , bool>> mapHeadersFiles;
-    std::map<std::pair<uint256, uint256>, std::pair<std::vector<unsigned char>, bool>> mapFilesParts;
+    std::map<std::pair<std::pair<uint256, uint256>, uint256>, std::pair<std::vector<unsigned char>, bool>> mapFilesParts;
 
 public:
 
@@ -43,7 +43,7 @@ public:
     /// Add an entry
     bool AddHeader(CStorageHead hf, bool status);
     bool AddHeaderFiles(CHeadFile hf, bool status);
-    bool AddFilesParts(std::pair<uint256, uint256> hashpair, std::pair<std::vector<unsigned char>, bool> data);
+    bool AddFilesParts(std::pair<std::pair<uint256, uint256>, uint256> hashpair, std::pair<std::vector<unsigned char>, bool> data);
 
     /// Check all Masternodes and remove inactive
     void CheckAndRemove(CConnman& connman);

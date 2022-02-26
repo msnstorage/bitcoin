@@ -21,10 +21,10 @@ private:
     void operator=(const CStorageHeadersDB&);
 
 public:
-    bool WriteHead(const uint256 hash, const CStorageHead& headFile, const bool& status);
-    bool ReadHead(const uint256 hash, std::pair<CStorageHead , bool> &pair);
-    bool HeadExists(const uint256 hash);
-    bool HeadErase(const uint256 hash);
+    bool WriteHead(const std::pair<uint256, uint256> hashpair, const CStorageHead& headFile, const bool& status);
+    bool ReadHead(const std::pair<uint256, uint256> hashpair, std::pair<CStorageHead , bool> &pair);
+    bool HeadExists(const std::pair<uint256, uint256> hashpair);
+    bool HeadErase(const std::pair<uint256, uint256> hashpair);
     bool LoadHeaders();
 };
 
@@ -55,11 +55,14 @@ private:
     void operator=(const CStorageFilesPartsDB&);
 
 public:
-    bool WriteFilesParts(const std::pair<uint256, uint256>  &hashpair, const std::pair<std::vector<unsigned char>, const bool> &data);
-    bool ReadFilesParts(const std::pair<uint256, uint256> hashpair, std::pair<std::vector<unsigned char>, bool> &data);
-    bool FilesPartsExists(const std::pair<uint256, uint256> hashpair);
-    bool FilesPartsErase(const std::pair<uint256, uint256> hashpair);
+    bool WriteFilesParts(const std::pair<std::pair<uint256, uint256>, uint256> &hashpair, const std::pair<std::vector<unsigned char>, const bool> &data);
+    bool ReadFilesParts(const std::pair<std::pair<uint256, uint256>, uint256> hashpair, std::pair<std::vector<unsigned char>, bool> &data);
+    bool FilesPartsExists(const std::pair<std::pair<uint256, uint256>, uint256> hashpair);
+    bool FilesPartsErase(const std::pair<std::pair<uint256, uint256>, uint256> hashpair);
     bool LoadFilesParts();
+    uint32_t GetSize();
+    void UpdateSize(uint32_t newsize);
+    bool WriteSize(const uint32_t size);
 };
 
 

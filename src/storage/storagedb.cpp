@@ -5,36 +5,38 @@
 #include <storage/storagedb.h>
 #include "storageman.h"
 
+static const char DB_FLAG = 'F';
+
 CStorageHeadersDB::CStorageHeadersDB(size_t nCacheSize, bool fMemory, bool fWipe) : CDBWrapper(GetStorageDir() / "headers", nCacheSize, fMemory, fWipe) {}
 
-bool CStorageHeadersDB::WriteHead(const uint256 hash, const CStorageHead& headFile, const bool& status)
+bool CStorageHeadersDB::WriteHead(const std::pair<uint256, uint256> hashpair, const CStorageHead& headFile, const bool& status)
 {
-    return Write(hash, std::make_pair(headFile, status));
+    return Write(hashpair, std::make_pair(headFile, status));
 }
 
-bool CStorageHeadersDB::ReadHead(const uint256 hash, std::pair<CStorageHead , bool> &pair)
+bool CStorageHeadersDB::ReadHead(const std::pair<uint256, uint256> hashpair, std::pair<CStorageHead , bool> &pair)
 {
-    return Read(hash, pair);
+    return Read(hashpair, pair);
 }
 
-bool CStorageHeadersDB::HeadExists(const uint256 hash)
+bool CStorageHeadersDB::HeadExists(const std::pair<uint256, uint256> hashpair)
 {
-    return Exists(hash);
+    return Exists(hashpair);
 }
 
-bool CStorageHeadersDB::HeadErase(const uint256 hash)
+bool CStorageHeadersDB::HeadErase(const std::pair<uint256, uint256> hashpair)
 {
-    return Erase(hash);
+    return Erase(hashpair);
 }
 
 bool CStorageHeadersDB::LoadHeaders()
 {
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
 
-    pcursor->Seek(uint256());
+    pcursor->Seek(std::pair<uint256, uint256>());
     // Load mapBlockIndex
     while (pcursor->Valid()) {
-        uint256 key;
+        std::pair<uint256, uint256> key;
         if (pcursor->GetKey(key)) {
             std::pair<CStorageHead , bool> value;
             if (pcursor->GetValue(value)) {
@@ -97,22 +99,47 @@ bool CStorageHeadersFilesDB::LoadHeadersFiles()
 
 CStorageFilesPartsDB::CStorageFilesPartsDB(size_t nCacheSize, bool fMemory, bool fWipe) : CDBWrapper(GetStorageDir() / "filesparts", nCacheSize, fMemory, fWipe) {}
 
-bool CStorageFilesPartsDB::WriteFilesParts(const std::pair<uint256, uint256>& hashpair, const std::pair<std::vector<unsigned char>, const bool>& data)
+uint32_t CStorageFilesPartsDB::GetSize()
+{
+    uint32_t size = 0;
+    std::string name = "size";
+    if (Read(std::make_pair(DB_FLAG, name), size))
+        return size;
+    return size;
+}
+
+void CStorageFilesPartsDB::UpdateSize(uint32_t newsize) {
+    uint32_t size = 0;
+    std::string name = "size";
+    if (Read(std::make_pair(DB_FLAG, name), size)) {
+        size = size + newsize;
+    } else {
+        size = size + newsize;
+    }
+    WriteSize(size);
+}
+
+bool CStorageFilesPartsDB::WriteSize(const uint32_t size) {
+    std::string name = "size";
+    return Write(std::make_pair(DB_FLAG, name), size);
+}
+
+bool CStorageFilesPartsDB::WriteFilesParts(const std::pair<std::pair<uint256, uint256>, uint256>& hashpair, const std::pair<std::vector<unsigned char>, const bool>& data)
 {
     return Write(hashpair, data);
 }
 
-bool CStorageFilesPartsDB::ReadFilesParts(const std::pair<uint256, uint256> hashpair, std::pair<std::vector<unsigned char>, bool> &data)
+bool CStorageFilesPartsDB::ReadFilesParts(const std::pair<std::pair<uint256, uint256>, uint256> hashpair, std::pair<std::vector<unsigned char>, bool> &data)
 {
     return Read(hashpair, data);
 }
 
-bool CStorageFilesPartsDB::FilesPartsExists(const std::pair<uint256, uint256> hashpair)
+bool CStorageFilesPartsDB::FilesPartsExists(const std::pair<std::pair<uint256, uint256>, uint256> hashpair)
 {
     return Exists(hashpair);
 }
 
-bool CStorageFilesPartsDB::FilesPartsErase(const std::pair<uint256, uint256> hashpair)
+bool CStorageFilesPartsDB::FilesPartsErase(const std::pair<std::pair<uint256, uint256>, uint256> hashpair)
 {
     return Erase(hashpair);
 }
@@ -120,11 +147,10 @@ bool CStorageFilesPartsDB::FilesPartsErase(const std::pair<uint256, uint256> has
 bool CStorageFilesPartsDB::LoadFilesParts()
 {
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
-
-    pcursor->Seek(std::make_pair(uint256(), uint256()));
+    pcursor->Seek(std::make_pair(std::make_pair(uint256(), uint256()), uint256()));
     // Load mapBlockIndex
     while (pcursor->Valid()) {
-        std::pair<uint256, uint256> key;
+        std::pair<std::pair<uint256, uint256>, uint256> key;
         if (pcursor->GetKey(key)) {
             std::pair<std::vector<unsigned char>, bool> value;
             if (pcursor->GetValue(value)) {

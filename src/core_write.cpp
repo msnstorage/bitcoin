@@ -238,7 +238,8 @@ void TxToUniv(const CTransaction& tx, const uint256& hashBlock, UniValue& entry,
         for (unsigned int j = 0; j < txstorage.vhead.size(); j++) {
             const CStorageHead& head = txstorage.vhead[j];
             UniValue sh(UniValue::VOBJ);
-            sh.pushKV("hash", head.hash.GetHex());
+            sh.pushKV("headhash", head.headhash.GetHex());
+            sh.pushKV("filehash", head.filehash.GetHex());
             sh.pushKV("size", (int64_t) head.size);
             storagehead.push_back(sh);
         }

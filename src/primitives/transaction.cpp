@@ -73,7 +73,7 @@ std::string CTxStorage::ToString() const
 std::string CStorageHead::ToString() const
 {
     std::string str;
-    return strprintf("CStorageHead(%s, %u)", hash.ToString().substr(0,10), size);
+    return strprintf("CStorageHead(%s, %s, %u)", headhash.ToString().substr(0,10), filehash.ToString().substr(0,10), size);
 }
 
 CMutableTransaction::CMutableTransaction() : nVersion(CTransaction::CURRENT_VERSION), nLockTime(0) {}

@@ -18,28 +18,30 @@
 class CStorageHead
 {
 public:
-    uint256 hash;
+    uint256 headhash;
+    uint256 filehash;
     uint32_t size;
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
 
     CStorageHead(): size(NULL_INDEX) { }
-    CStorageHead(const uint256& hashIn, uint32_t sizeIn): hash(hashIn), size(sizeIn) { }
+    CStorageHead(const uint256& headhashIn, const uint256& filehashIn, uint32_t sizeIn): headhash(headhashIn), filehash(filehashIn), size(sizeIn) { }
 
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(hash);
+        READWRITE(headhash);
+        READWRITE(filehash);
         READWRITE(size);
     }
 
-    void SetNull() { hash.SetNull(); size = NULL_INDEX; }
-    bool IsNull() const { return (hash.IsNull() && size == NULL_INDEX); }
+    void SetNull() { headhash.SetNull(); filehash.SetNull(); size = NULL_INDEX; }
+    bool IsNull() const { return (headhash.IsNull() && filehash.IsNull() && size == NULL_INDEX); }
 
     friend bool operator==(const CStorageHead& a, const CStorageHead& b)
     {
-        return (a.hash == b.hash && a.size == b.size);
+        return (a.headhash == b.headhash && a.filehash == b.filehash && a.size == b.size);
     }
 
     friend bool operator!=(const CStorageHead& a, const CStorageHead& b)
@@ -139,36 +141,38 @@ public:
 class CHeadFilePartL
 {
 public:
-    uint256 hash;
+    uint256 headhash;
+    uint256 filehash;
+    uint256 parthash;
     uint32_t part_begin;
     uint32_t part_end;
 
     //memory onjy
     bool loaded;
     int64_t lasttime;
-    uint256 filehash;
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
 
-    CHeadFilePartL(): part_begin(NULL_INDEX), part_end(NULL_INDEX), loaded(false), lasttime(0), filehash(uint256S("")) { }
-    CHeadFilePartL(const uint256& hashIn, uint32_t part_beginIn, uint32_t part_endIn): hash(hashIn), part_begin(part_beginIn), part_end(part_endIn) { }
+    CHeadFilePartL(): headhash(uint256S("")), filehash(uint256S("")), parthash(uint256S("")), part_begin(NULL_INDEX), part_end(NULL_INDEX), loaded(false), lasttime(0) { }
+    CHeadFilePartL(const uint256& headhashIn, const uint256& filehashIn, const uint256& parthashIn, uint32_t part_beginIn, uint32_t part_endIn): headhash(headhashIn), filehash(filehashIn), parthash(parthashIn), part_begin(part_beginIn), part_end(part_endIn) { }
 
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(hash);
+        READWRITE(headhash);
+        READWRITE(filehash);
+        READWRITE(parthash);
         READWRITE(part_begin);
         READWRITE(part_end);
-        READWRITE(filehash);
     }
 
-    void SetNull() { hash.SetNull(); part_begin = NULL_INDEX; part_end = NULL_INDEX; loaded = false; lasttime =0; filehash.SetNull();}
-    bool IsNull() const { return (hash.IsNull() && part_begin == NULL_INDEX && part_end == NULL_INDEX); }
+    void SetNull() { headhash.SetNull(), filehash.SetNull(); parthash.SetNull(); part_begin = NULL_INDEX; part_end = NULL_INDEX; loaded = false; lasttime =0;}
+    bool IsNull() const { return (headhash.IsNull() && filehash.IsNull() && parthash.IsNull() && part_begin == NULL_INDEX && part_end == NULL_INDEX); }
 
     friend bool operator==(const CHeadFilePartL& a, const CHeadFilePartL& b)
     {
-        return (a.hash == b.hash && a.part_begin == b.part_begin && a.part_end == b.part_end && a.filehash == b.filehash);
+        return (a.headhash == b.headhash && a.filehash == b.filehash && a.parthash == b.parthash && a.part_begin == b.part_begin && a.part_end == b.part_end);
     }
 
     friend bool operator!=(const CHeadFilePartL& a, const CHeadFilePartL& b)
@@ -223,29 +227,31 @@ public:
 class CHeadFileStatus
 {
 public:
-    uint256 hash;
+    uint256 headhash;
+    uint256 filehash;
     uint32_t status;
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
 
     CHeadFileStatus(): status(NULL_INDEX) { }
-    CHeadFileStatus(const uint256& hashIn, uint32_t statusIn): hash(hashIn), status(statusIn) { }
+    CHeadFileStatus(const uint256& headhashIn, const uint256& filehashIn, uint32_t statusIn): headhash(headhashIn), filehash(filehashIn), status(statusIn) { }
 
 
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(hash);
+        READWRITE(headhash);
+        READWRITE(filehash);
         READWRITE(status);
     }
 
-    void SetNull() { hash.SetNull();}
-    bool IsNull() const { return (hash.IsNull()); }
+    void SetNull() { headhash.SetNull(); filehash.SetNull();}
+    bool IsNull() const { return (headhash.IsNull() && filehash.IsNull()); }
 
     friend bool operator==(const CHeadFileStatus& a, const CHeadFileStatus& b)
     {
-        return (a.hash == b.hash && a.status == b.status);
+        return (a.headhash == b.headhash && a.filehash == b.filehash && a.status == b.status);
     }
 
     friend bool operator!=(const CHeadFileStatus& a, const CHeadFileStatus& b)
@@ -300,34 +306,36 @@ public:
 class CFP
 {
 public:
-    uint256 hash;
+    uint256 headhash;
     uint256 filehash;
+    uint256 parthash;
     uint32_t part_begin;
     uint32_t part_end;
     std::vector<unsigned char> data;
 
     static constexpr uint32_t NULL_INDEX = std::numeric_limits<uint32_t>::max();
 
-    CFP(): hash(uint256S("")) { }
-    CFP(const uint256& hashIn, const uint256& filehashIn, uint32_t part_beginIn, uint32_t part_endIn, std::vector<unsigned char> dataIn): hash(hashIn), filehash(filehashIn), part_begin(part_beginIn), part_end(part_endIn), data(dataIn) { }
+    CFP(): headhash(uint256S("")) { }
+    CFP(const uint256& headhashIn, const uint256& filehashIn, const uint256& parthashIn, uint32_t part_beginIn, uint32_t part_endIn, std::vector<unsigned char> dataIn): headhash(headhashIn), filehash(filehashIn), parthash(parthashIn), part_begin(part_beginIn), part_end(part_endIn), data(dataIn) { }
 
     ADD_SERIALIZE_METHODS;
 
     template <typename Stream, typename Operation>
     inline void SerializationOp(Stream& s, Operation ser_action) {
-        READWRITE(hash);
+        READWRITE(headhash);
         READWRITE(filehash);
+        READWRITE(parthash);
         READWRITE(part_begin);
         READWRITE(part_end);
         READWRITE(data);
     }
 
-    void SetNull() { hash.SetNull(); filehash.SetNull(); part_begin = 0; part_end = 0; data.clear(); }
-    bool IsNull() const { return (hash.IsNull() && filehash.IsNull() && part_begin == 0 && part_end == 0 && data.size() == 0); }
+    void SetNull() { headhash.SetNull(); filehash.SetNull(); parthash.SetNull(); part_begin = 0; part_end = 0; data.clear(); }
+    bool IsNull() const { return (headhash.IsNull() && filehash.IsNull() && parthash.IsNull() && part_begin == 0 && part_end == 0 && data.size() == 0); }
 
     friend bool operator==(const CFP& a, const CFP& b)
     {
-        return (a.hash == b.hash && a.filehash == b.filehash && a.part_begin == b.part_begin && a.part_end == b.part_end && a.data == b.data);
+        return (a.headhash == b.headhash && a.filehash == b.filehash && a.parthash == b.parthash && a.part_begin == b.part_begin && a.part_end == b.part_end && a.data == b.data);
     }
 
     friend bool operator!=(const CFP& a, const CFP& b)
