@@ -160,9 +160,6 @@ bool IsBlockPayeeValid(const CTransactionRef txNew, int nBlockHeight, CAmount bl
 
 bool IsBlockExist(int nBlockHeight, const std::shared_ptr<const CBlock> pblock)
 {
-    if (Params().GetConsensus().nMasternodePaymentsStartBlock > nBlockHeight) {
-        return true;
-    }
 
     if(!masternodeSync.IsSynced()) {
         //there is no budget data to use to check anything, let's just accept the longest chain
@@ -759,7 +756,7 @@ bool CMasternodePayments::ProcessBlock(int nBlockHeight, CConnman& connman)
 
 void CMasternodePayments::CheckPreviousBlockVotes(int nPrevBlockHeight)
 {
-    if (!masternodeSync.IsWinnersListSynced() || Params().GetConsensus().nMasternodePaymentsStartBlock > nPrevBlockHeight) return;
+    if (!masternodeSync.IsWinnersListSynced()) return;
 
     std::string debugStr;
 

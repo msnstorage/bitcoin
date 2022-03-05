@@ -63,7 +63,7 @@ bool CStorageMan::AddFilesParts(std::pair<std::pair<uint256, uint256>, uint256> 
         LOCK(cs);
 
         if (mapFilesParts.size()<500) {
-            mapFilesParts[std::make_pair(std::make_pair(hashpair.first.first, hashpair.first.second), hashpair.second)] = data;
+            mapFilesParts[hashpair] = data;
         }
         pStorageFilesPartsDB->WriteFilesParts(hashpair, data);
         return true;
@@ -122,13 +122,14 @@ void CStorageMan::CheckAndRemove(CConnman& connman)
         LogPrintf("CStorageMan::CheckAndRemove mapHeaders=%u\n", mapHeaders.size());
 
         std::map<std::pair<uint256, uint256>, std::pair<CStorageHead , bool>>::iterator pos;
-        for (pos = mapHeaders.begin(); pos != mapHeaders.end(); ++pos) {
+        for (pos = mapHeaders.begin(); pos != mapHeaders.end();) {
             if (!pos->second.second) {
                 connman.ForEachNode(CConnman::AllNodes, [&connman, &pos](CNode* pnode) {
                     connman.PushMessage(pnode, CNetMsgMaker(pnode->GetSendVersion()).Make(NetMsgType::CHKFHEAD, pos->first)); //check storage head
                 });
+                ++pos;
             } else {
-                mapHeaders.erase(pos);
+                mapHeaders.erase(pos++);
             }
         }
 
@@ -137,10 +138,12 @@ void CStorageMan::CheckAndRemove(CConnman& connman)
         LogPrintf("CStorageMan::CheckAndRemove mapHeadersFiles=%u\n", mapHeadersFiles.size());
 
         std::map<uint256, std::pair<CHeadFile , bool>>::iterator posf;
-        for (posf = mapHeadersFiles.begin(); posf != mapHeadersFiles.end(); ++posf) {
+        for (posf = mapHeadersFiles.begin(); posf != mapHeadersFiles.end();) {
             if (posf->second.second) {
                 pStorageHeadersFilesDB->WriteHeadFiles(posf->first, posf->second.first, true);
-                mapHeadersFiles.erase(posf);
+                mapHeadersFiles.erase(posf++);
+            } else {
+                ++posf;
             }
         }
 
@@ -149,31 +152,34 @@ void CStorageMan::CheckAndRemove(CConnman& connman)
         LogPrintf("CStorageMan::CheckAndRemove mapFilesParts=%u\n", mapFilesParts.size());
 
         std::map<std::pair<std::pair<uint256, uint256>, uint256>, std::pair<std::vector<unsigned char>, bool>>::iterator itfp;
-        for (itfp = mapFilesParts.begin(); itfp != mapFilesParts.end(); ++itfp) {
+        for (itfp = mapFilesParts.begin(); itfp != mapFilesParts.end();) {
             if (itfp->second.second) {
-                mapFilesParts.erase(itfp);
-            } else if (pStorageFilesPartsDB->FilesPartsExists(itfp->first) && !itfp->second.second) {
-                if (pStorageHeadersFilesDB->HeadFilesExists(itfp->first.first.second)) {
-                    std::pair<CHeadFile , bool> pair;
-                    if (pStorageHeadersFilesDB->ReadHeadFiles(itfp->first.first.second, pair)) {
-                        for (size_t i = 0; i < pair.first.vhead.size(); i++) {
-                            LogPrintf("CStorageMan::CheckAndRemove hash1=%s, hash2=%s\n", pair.first.vhead[i].hash.ToString(), itfp->first.second.ToString());
-                            if (pair.first.vhead[i].hash == itfp->first.second) {
-                                CHeadFilePartL fhp;
-                                fhp.headhash = itfp->first.first.first;
-                                fhp.filehash = itfp->first.first.second;
-                                fhp.parthash = itfp->first.second;
-                                fhp.part_begin = pair.first.vhead[i].part_begin;
-                                fhp.part_end = pair.first.vhead[i].part_end;
-                                connman.ForEachNode(CConnman::AllNodes, [&connman, &fhp](CNode* pnode) {
-                                    connman.PushMessage(pnode, CNetMsgMaker(pnode->GetSendVersion()).Make(NetMsgType::FGET, fhp)); //get storage file
-                                });
-                                MilliSleep(100);
-                                break;
+                mapFilesParts.erase(itfp++);
+            } else {
+                if (pStorageFilesPartsDB->FilesPartsExists(itfp->first) && !itfp->second.second) {
+                    if (pStorageHeadersFilesDB->HeadFilesExists(itfp->first.first.second)) {
+                        std::pair<CHeadFile , bool> pair;
+                        if (pStorageHeadersFilesDB->ReadHeadFiles(itfp->first.first.second, pair)) {
+                            for (size_t i = 0; i < pair.first.vhead.size(); i++) {
+                                LogPrintf("CStorageMan::CheckAndRemove hash1=%s, hash2=%s\n", pair.first.vhead[i].hash.ToString(), itfp->first.second.ToString());
+                                if (pair.first.vhead[i].hash == itfp->first.second) {
+                                    CHeadFilePartL fhp;
+                                    fhp.headhash = itfp->first.first.first;
+                                    fhp.filehash = itfp->first.first.second;
+                                    fhp.parthash = itfp->first.second;
+                                    fhp.part_begin = pair.first.vhead[i].part_begin;
+                                    fhp.part_end = pair.first.vhead[i].part_end;
+                                    connman.ForEachNode(CConnman::AllNodes, [&connman, &fhp](CNode* pnode) {
+                                        connman.PushMessage(pnode, CNetMsgMaker(pnode->GetSendVersion()).Make(NetMsgType::FGET, fhp)); //get storage file
+                                    });
+                                    MilliSleep(100);
+                                    break;
+                                }
                             }
                         }
                     }
                 }
+                ++itfp;
             }
         }
 
@@ -266,7 +272,9 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
         } else {
             std::pair<std::vector<unsigned char>, bool> data;
             data.second = false;
+            data.first = fileData;
             pStorageFilesPartsDB->WriteFilesParts(std::make_pair(std::make_pair(headhash, filehash), parthash), data);
+            pStorageFilesPartsDB->UpdateSize(data.first.size());
         }
     }
     else if (strCommand == NetMsgType::CHKFHEAD)
@@ -318,14 +326,16 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
         if (pStorageFilesPartsDB->FilesPartsExists(std::make_pair(std::make_pair(headhash, filehash), filehash))) {
             std::pair<std::vector<unsigned char>, bool> data;
             pStorageFilesPartsDB->ReadFilesParts(std::make_pair(std::make_pair(headhash, filehash), parthash), data);
-            CFP HFP;
-            HFP.headhash = headhash;
-            HFP.filehash = filehash;
-            HFP.parthash = parthash;
-            HFP.part_begin = part_begin;
-            HFP.part_end = part_end;
-            HFP.data = data.first;
-            connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FPART, HFP));
+            if (data.second) {
+                CFP HFP;
+                HFP.headhash = headhash;
+                HFP.filehash = filehash;
+                HFP.parthash = parthash;
+                HFP.part_begin = part_begin;
+                HFP.part_end = part_end;
+                HFP.data = data.first;
+                connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FPART, HFP));
+            }
         }
 
     }
