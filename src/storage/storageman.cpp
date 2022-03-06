@@ -182,7 +182,7 @@ void CStorageMan::CheckAndRemove(CConnman& connman)
             }
         }
 
-        LogPrintf("CStorageMan::CheckAndRemove storage size=%u\n", storageman.FilesPartsSize());
+        LogPrintf("CStorageMan::CheckAndRemove storage size=%u\n", pStorageFilesPartsDB->GetSize());
         
     }
 

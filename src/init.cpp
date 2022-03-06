@@ -1544,11 +1544,11 @@ bool AppInitMain(InitInterfaces& interfaces)
                 pSporkDB.reset();
                 pSporkDB.reset(new CSporkDB(0, false, false));
                 pStorageHeadersDB.reset();
-                pStorageHeadersDB.reset(new CStorageHeadersDB(0, false, false));
+                pStorageHeadersDB.reset(new CStorageHeadersDB(500, false, false));
                 pStorageHeadersFilesDB.reset();
-                pStorageHeadersFilesDB.reset(new CStorageHeadersFilesDB(0, false, false));
+                pStorageHeadersFilesDB.reset(new CStorageHeadersFilesDB(500, false, false));
                 pStorageFilesPartsDB.reset();
-                pStorageFilesPartsDB.reset(new CStorageFilesPartsDB(0, false, false));
+                pStorageFilesPartsDB.reset(new CStorageFilesPartsDB(500, false, false));
                 if (fReset) {
                     pblocktree->WriteReindexing(true);
                     //If we're reindexing in prune mode, wipe away unusable block files and all undo data files
