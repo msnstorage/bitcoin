@@ -32,18 +32,15 @@ bool CStorageHeadersDB::HeadErase(const std::pair<uint256, uint256> hashpair)
 bool CStorageHeadersDB::LoadHeaders()
 {
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
-
     pcursor->Seek(std::pair<uint256, uint256>());
-    // Load mapBlockIndex
-    while (pcursor->Valid()) {
+    for (pcursor->SeekToFirst(); pcursor->Valid(); pcursor->Next()) {
         std::pair<uint256, uint256> key;
         if (pcursor->GetKey(key)) {
             std::pair<CStorageHead , bool> value;
-            if (pcursor->GetValue(value)) {
+            if(pcursor->GetValue(value)) {
                 if (storageman.HeadersSize()<500 && !value.second) {
                     storageman.AddHeader(value.first, value.second);
                 }
-                pcursor->Next();
             }
         } else {
             break;
@@ -77,18 +74,15 @@ bool CStorageHeadersFilesDB::HeadFilesErase(const uint256 hash)
 bool CStorageHeadersFilesDB::LoadHeadersFiles()
 {
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
-
     pcursor->Seek(uint256());
-    // Load mapBlockIndex
-    while (pcursor->Valid()) {
+    for (pcursor->SeekToFirst(); pcursor->Valid(); pcursor->Next()) {
         uint256 key;
         if (pcursor->GetKey(key)) {
             std::pair<CHeadFile , bool> value;
-            if (pcursor->GetValue(value)) {
+            if(pcursor->GetValue(value)) {
                 if (storageman.HeadersFilesSize()<500 && !value.second) {
                     storageman.AddHeaderFiles(value.first, value.second);
                 }
-                pcursor->Next();
             }
         } else {
             break;
@@ -148,16 +142,14 @@ bool CStorageFilesPartsDB::LoadFilesParts()
 {
     std::unique_ptr<CDBIterator> pcursor(NewIterator());
     pcursor->Seek(std::make_pair(std::make_pair(uint256(), uint256()), uint256()));
-    // Load mapBlockIndex
-    while (pcursor->Valid()) {
+    for (pcursor->SeekToFirst(); pcursor->Valid(); pcursor->Next()) {
         std::pair<std::pair<uint256, uint256>, uint256> key;
         if (pcursor->GetKey(key)) {
             std::pair<std::vector<unsigned char>, bool> value;
-            if (pcursor->GetValue(value)) {
+            if(pcursor->GetValue(value)) {
                 if (storageman.FilesPartsSize()<500 && !value.second) {
                     storageman.AddFilesParts(key, value);
                 }
-                pcursor->Next();
             }
         } else {
             break;
