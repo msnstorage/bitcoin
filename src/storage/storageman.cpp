@@ -208,33 +208,26 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
     { //file head
         uint256 headhash;
         uint256 filehash;
-        std::vector<unsigned char> fileData;
-        vRecv >> headhash >> filehash >> fileData;
         CHeadFile head;
 
-        CDataStream ssObj(fileData, SER_GETHASH, PROTOCOL_VERSION);
-        // verify stored checksum matches input data
-        uint256 hashTmp = Hash(ssObj.begin(), ssObj.end());
+        vRecv >> headhash >> filehash >> head;
 
-        if (headhash == hashTmp) {
-            ssObj >> head;
-            {
-                LOCK(cs);
-                AddHeaderFiles(head, true);
-                if (pStorageHeadersDB->HeadExists(std::make_pair(headhash, filehash))) {
-                    std::pair<CStorageHead , bool> pair;
-                    if (pStorageHeadersDB->ReadHead(std::make_pair(headhash, filehash), pair)) {
-                        pair.second = true;
-                        pStorageHeadersDB->WriteHead(std::make_pair(headhash, filehash), pair.first, pair.second);
-                        mapHeaders[std::make_pair(headhash, filehash)] = pair;
+        {
+            LOCK(cs);
+            AddHeaderFiles(head, true);
+            if (pStorageHeadersDB->HeadExists(std::make_pair(headhash, filehash))) {
+                std::pair<CStorageHead , bool> pair;
+                if (pStorageHeadersDB->ReadHead(std::make_pair(headhash, filehash), pair)) {
+                    pair.second = true;
+                    pStorageHeadersDB->WriteHead(std::make_pair(headhash, filehash), pair.first, pair.second);
+                    mapHeaders[std::make_pair(headhash, filehash)] = pair;
 
-                        LogPrintf("CStorageMan::FH headhash=%s filehash=%s size=%i status=%d\n", pair.first.headhash.ToString(), pair.first.filehash.ToString(), pair.first.size, pair.second);
+                    LogPrintf("CStorageMan::FH headhash=%s filehash=%s size=%i status=%d\n", pair.first.headhash.ToString(), pair.first.filehash.ToString(), pair.first.size, pair.second);
 
-                        std::pair<std::vector<unsigned char>, bool> data;
-                        for (size_t i = 0; i < head.vhead.size(); i++) {
-                            data.second = false;
-                            AddFilesParts(std::make_pair(std::make_pair(headhash, filehash), head.vhead[i].hash), data);
-                        }
+                    std::pair<std::vector<unsigned char>, bool> data;
+                    for (size_t i = 0; i < head.vhead.size(); i++) {
+                        data.second = false;
+                        AddFilesParts(std::make_pair(std::make_pair(headhash, filehash), head.vhead[i].hash), data);
                     }
                 }
             }
@@ -299,15 +292,16 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
     }
     else if (strCommand == NetMsgType::FHGET)
     { //file
-        uint256 hash;
-        vRecv >> hash;
+        uint256 headhash;
+        uint256 filehash;
+        vRecv >> headhash >> filehash;
 
-        LogPrint(BCLog::STORAGE, "CStorageMan::FHGET hash:%s\n", hash.ToString());
+        LogPrint(BCLog::STORAGE, "CStorageMan::FHGET headhash=%s filehash=%s\n", headhash.ToString(), filehash.ToString());
 
-        if (pStorageHeadersFilesDB->HeadFilesExists(hash)) {
+        if (pStorageHeadersFilesDB->HeadFilesExists(filehash)) {
             std::pair<CHeadFile, bool> pair;
-            if (pStorageHeadersFilesDB->ReadHeadFiles(hash, pair)) {
-                connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FH, pair.first));
+            if (pStorageHeadersFilesDB->ReadHeadFiles(filehash, pair)) {
+                connman.PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::FH, std::make_pair(std::make_pair(headhash, filehash), pair.first)));
             }
         }
     }
@@ -323,7 +317,7 @@ void CStorageMan::ProcessMessage(CNode* pfrom, const std::string& strCommand, CD
         LogPrint(BCLog::STORAGE, "CStorageMan::FGET headhash=%s filehash=%s parthash=%s part_begin:%u part_end:%u\n"
                  , headhash.ToString(), filehash.ToString(), parthash.ToString(), part_begin, part_end);
 
-        if (pStorageFilesPartsDB->FilesPartsExists(std::make_pair(std::make_pair(headhash, filehash), filehash))) {
+        if (pStorageFilesPartsDB->FilesPartsExists(std::make_pair(std::make_pair(headhash, filehash), parthash))) {
             std::pair<std::vector<unsigned char>, bool> data;
             pStorageFilesPartsDB->ReadFilesParts(std::make_pair(std::make_pair(headhash, filehash), parthash), data);
             if (data.second) {
