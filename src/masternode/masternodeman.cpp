@@ -1585,7 +1585,6 @@ void ThreadCheckMasternode(CConnman& connman)
 
         // try to sync from all available nodes, one step at a time
         masternodeSync.ProcessTick(connman);
-        //storageNet.ProcessTick(connman); TODO: FIX
 
         if(masternodeSync.IsBlockchainSynced() && !ShutdownRequested()) {
 

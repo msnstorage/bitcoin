@@ -2775,26 +2775,20 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             // we have a chain with at least nMinimumChainWork), and we ignore
             // compact blocks with less work than our tip, it is safe to treat
             // reconstructed compact blocks as having been requested.
-            if(IsBlockExist(chainActive.Height()+1, pblock)) {
-                ProcessNewBlock(chainparams, pblock, /*fForceProcessing=*/true, &fNewBlock);
-                if (fNewBlock) {
-                    pfrom->nLastBlockTime = GetTime();
-                } else {
-                    LOCK(cs_main);
-                    mapBlockSource.erase(pblock->GetHash());
-                }
-                LOCK(cs_main); // hold cs_main for CBlockIndex::IsValid()
-                if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS)) {
-                    // Clear download state for this block, which is in
-                    // process from some other peer.  We do this after calling
-                    // ProcessNewBlock so that a malleated cmpctblock announcement
-                    // can't be used to interfere with block relay.
-                    MarkBlockAsReceived(pblock->GetHash());
-                }
-            }  else {
-                std::vector<CInv> vToFetch;
-                vToFetch.push_back(CInv(MSG_MASTERNODE_PAYMENT_BLOCK, pblock->GetHash()));
-                connman->PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::GETDATA, vToFetch));
+            ProcessNewBlock(chainparams, pblock, /*fForceProcessing=*/true, &fNewBlock);
+            if (fNewBlock) {
+                pfrom->nLastBlockTime = GetTime();
+            } else {
+                LOCK(cs_main);
+                mapBlockSource.erase(pblock->GetHash());
+            }
+            LOCK(cs_main); // hold cs_main for CBlockIndex::IsValid()
+            if (pindex->IsValid(BLOCK_VALID_TRANSACTIONS)) {
+                // Clear download state for this block, which is in
+                // process from some other peer.  We do this after calling
+                // ProcessNewBlock so that a malleated cmpctblock announcement
+                // can't be used to interfere with block relay.
+                MarkBlockAsReceived(pblock->GetHash());
             }
         }
         return true;
@@ -2864,18 +2858,12 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             // disk-space attacks), but this should be safe due to the
             // protections in the compact block handler -- see related comment
             // in compact block optimistic reconstruction handling.
-            if(IsBlockExist(chainActive.Height()+1, pblock)) {
-                ProcessNewBlock(chainparams, pblock, /*fForceProcessing=*/true, &fNewBlock);
-                if (fNewBlock) {
-                    pfrom->nLastBlockTime = GetTime();
-                } else {
-                    LOCK(cs_main);
-                    mapBlockSource.erase(pblock->GetHash());
-                }
+            ProcessNewBlock(chainparams, pblock, /*fForceProcessing=*/true, &fNewBlock);
+            if (fNewBlock) {
+                pfrom->nLastBlockTime = GetTime();
             } else {
-                std::vector<CInv> vToFetch;
-                vToFetch.push_back(CInv(MSG_MASTERNODE_PAYMENT_BLOCK, pblock->GetHash()));
-                connman->PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::GETDATA, vToFetch));
+                LOCK(cs_main);
+                mapBlockSource.erase(pblock->GetHash());
             }
         }
         return true;
@@ -2925,18 +2913,12 @@ bool static ProcessMessage(CNode* pfrom, const std::string& strCommand, CDataStr
             mapBlockSource.emplace(hash, std::make_pair(pfrom->GetId(), true));
         }
         bool fNewBlock = false;
-        if(IsBlockExist(chainActive.Height()+1, pblock)) {
-            ProcessNewBlock(chainparams, pblock, forceProcessing, &fNewBlock);
-            if (fNewBlock) {
-                pfrom->nLastBlockTime = GetTime();
-            } else {
-                LOCK(cs_main);
-                mapBlockSource.erase(pblock->GetHash());
-            }
+        ProcessNewBlock(chainparams, pblock, forceProcessing, &fNewBlock);
+        if (fNewBlock) {
+            pfrom->nLastBlockTime = GetTime();
         } else {
-            std::vector<CInv> vToFetch;
-            vToFetch.push_back(CInv(MSG_MASTERNODE_PAYMENT_BLOCK, pblock->GetHash()));
-            connman->PushMessage(pfrom, CNetMsgMaker(pfrom->GetSendVersion()).Make(NetMsgType::GETDATA, vToFetch));
+            LOCK(cs_main);
+            mapBlockSource.erase(pblock->GetHash());
         }
         return true;
     }
